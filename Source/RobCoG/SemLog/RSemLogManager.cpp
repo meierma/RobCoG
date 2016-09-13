@@ -25,14 +25,17 @@ ARSemLogManager::ARSemLogManager()
 	bLogSemanticMap = true;
 	bLogSemanticEvents = true;
 
-	// Distance squared threshold for logging the raw data
-	DistanceThresholdSquared = 0.01;
+	// Distance threshold for logging the raw data
+	DistanceThreshold = 0.1;
 }
 
 // Called when the game starts or when spawned
 void ARSemLogManager::BeginPlay()
 {
 	Super::BeginPlay();
+	
+	// The square of the distance threshold (faster comparisons)
+	DistanceThresholdSquared = DistanceThreshold * DistanceThreshold;
 
 	// Level directory path
 	LevelPath = LogRootDirectoryName + "/" +	GetWorld()->GetName();

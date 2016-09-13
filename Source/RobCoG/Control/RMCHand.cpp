@@ -20,7 +20,7 @@ ARMCHand::ARMCHand()
 
 	// Set the default skeletal mesh of the hand
 	static ConstructorHelpers::FObjectFinder<USkeletalMesh> LeftSkelMesh(TEXT(
-		"SkeletalMesh'/Game/Player/Hands/Mesh/SM_LeftHand.SM_LeftHand'"));
+		"SkeletalMesh'/Game/Player/Hands/Meshes/SM_LeftHand.SM_LeftHand'"));
 	// Add skeletal mesh to component
 	GetSkeletalMeshComponent()->SetSkeletalMesh(LeftSkelMesh.Object);
 	// Simulate physics

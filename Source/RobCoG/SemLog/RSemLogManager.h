@@ -42,24 +42,27 @@ private:
 	void WriteUniqueNames(const FString Path);
 
 	// Directory to save the logs
-	UPROPERTY(EditAnywhere, Category = "Semantic logger")
+	UPROPERTY(EditAnywhere, Category = "Robcog|Semantic logger")
 	FString LogRootDirectoryName;
 
 	// Log raw data
-	UPROPERTY(EditAnywhere, Category = "Semantic logger")
+	UPROPERTY(EditAnywhere, Category = "Robcog|Semantic logger")
 	bool bLogRawData;
 
-	// Distance threshold (squared) for raw data logging
-	UPROPERTY(EditAnywhere, Category = "Semantic logger")
-	float DistanceThresholdSquared;
+	// Distance threshold for raw data logging (cm)
+	UPROPERTY(EditAnywhere, Category = "Robcog|Semantic logger")
+	float DistanceThreshold;
 
 	// Log semantic map (if not already logged)
-	UPROPERTY(EditAnywhere, Category = "Semantic logger")
+	UPROPERTY(EditAnywhere, Category = "Robcog|Semantic logger")
 	bool bLogSemanticMap;
 
 	// Log semantic events
-	UPROPERTY(EditAnywhere, Category = "Semantic logger")
+	UPROPERTY(EditAnywhere, Category = "Robcog|Semantic logger")
 	bool bLogSemanticEvents;
+
+	// Distance threshold squared for raw data logging
+	float DistanceThresholdSquared;
 
 	// Map of skeletal component (to be logged) names to actor map 
 	TMap<FString, ASkeletalMeshActor*> SkelActNameToActPtrMap;

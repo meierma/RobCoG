@@ -29,7 +29,7 @@ void AREntity::BeginPlay()
 
 	if (ItemClassName.Contains("Default"))
 	{
-		UE_LOG(RobCoG, Error, TEXT(" ** RItem: %s has no semantic class name set!"),
+		UE_LOG(RobCoG, Error, TEXT(" ** RItem %s, has no semantic class name set!"),
 			*GetActorLabel());
 	}
 	
