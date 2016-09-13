@@ -10,64 +10,6 @@
 #define PrintGreen(text) if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 1.5, FColor::Green,text)
 #define PrintDur(text, duration) if (GEngine) GEngine->AddOnScreenDebugMessage(-1, duration, FColor::White,text)
 
-
-
-/** Enum indicating the drawer states */
-UENUM(BlueprintType)
-enum class ERDrawerState : uint8
-{
-	Closed			UMETA(DisplayName = "Closed"),
-	HalfClosed		UMETA(DisplayName = "HalfClosed"),
-	Opened			UMETA(DisplayName = "Opened"),
-	HalfOpened		UMETA(DisplayName = "HalfOpened"),
-};
-
-/** Enum indicating the hand type */
-UENUM(BlueprintType)
-enum class ERHandType : uint8
-{
-	Left		UMETA(DisplayName = "Left"),
-	Right		UMETA(DisplayName = "Right"),
-};
-
-/** Enum indicating the finger type */
-UENUM(BlueprintType)
-enum class ERFingerType : uint8
-{
-	Thumb		UMETA(DisplayName = "Thumb"),
-	Index		UMETA(DisplayName = "Index"),
-	Middle		UMETA(DisplayName = "Middle"),
-	Ring		UMETA(DisplayName = "Ring"),
-	Pinky		UMETA(DisplayName = "Pinky"),
-};
-
-
-/** Enum indicating the finger type */
-UENUM(BlueprintType)
-enum class ERHandLimb : uint8
-{
-	Thumb		UMETA(DisplayName = "Thumb"),
-	Index		UMETA(DisplayName = "Index"),
-	Middle		UMETA(DisplayName = "Middle"),
-	Ring		UMETA(DisplayName = "Ring"),
-	Pinky		UMETA(DisplayName = "Pinky"),
-	Palm		UMETA(DisplayName = "Palm")
-};
-
-/** Enum indicating the grasp state */
-UENUM(BlueprintType)
-enum class ERGraspState : uint8
-{
-	Opened		UMETA(DisplayName = "Opened"),
-	Opening		UMETA(DisplayName = "Opening"),
-	Closed		UMETA(DisplayName = "Closed"),
-	Closing		UMETA(DisplayName = "Closing"),
-	Free		UMETA(DisplayName = "Free"),
-	Blocked		UMETA(DisplayName = "Blocked"),
-	Attached	UMETA(DisplayName = "Attached"),
-};
-
-
 /** Utils */
 USTRUCT()
 struct FRUtils

@@ -5,21 +5,21 @@ using System.IO;
 
 public class RobCoG : ModuleRules
 {
-	// PATH HELPERS
+    // PATH HELPERS
     private string ThirdPartyPath
     {
-        get { return Path.Combine( ModuleDirectory, "../../ThirdParty/" ); }
+        get { return Path.Combine(ModuleDirectory, "../../ThirdParty/"); }
     }
 
-	public RobCoG(TargetInfo Target)
-	{
-		PublicDependencyModuleNames.AddRange(new string[] {
-			"Core",
-			"CoreUObject",
-			"Engine",
-			"InputCore",
-			"Json",
-			"JsonUtilities",
+    public RobCoG(TargetInfo Target)
+    {
+        PublicDependencyModuleNames.AddRange(new string[] {
+            "Core",
+            "CoreUObject",
+            "Engine",
+            "InputCore",
+            "Json",
+            "JsonUtilities",
 			//"XmlParser"
 			//"HydraPlugin",
 			//"HeadMountedDisplay",
@@ -27,26 +27,26 @@ public class RobCoG : ModuleRules
 			//"APEX",
         });
 
-		PrivateDependencyModuleNames.AddRange(new string[] {
-			"HeadMountedDisplay",
-			"SteamVR"
-		 });
+        PrivateDependencyModuleNames.AddRange(new string[] {
+            "HeadMountedDisplay",
+            "SteamVR"
+         });
 
-		// Uncomment if you are using Slate UI
-		// PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore" });
-		
-		// Uncomment if you are using online features
-		// PrivateDependencyModuleNames.Add("OnlineSubsystem");
-		// if ((Target.Platform == UnrealTargetPlatform.Win32) || (Target.Platform == UnrealTargetPlatform.Win64))
-		// {
-		//		if (UEBuildConfiguration.bCompileSteamOSS == true)
-		//		{
-		//			DynamicallyLoadedModuleNames.Add("OnlineSubsystemSteam");
-		//		}
-		// }
+        // Uncomment if you are using Slate UI
+        // PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore" });
 
-		// THIRD PARTY
+        // Uncomment if you are using online features
+        // PrivateDependencyModuleNames.Add("OnlineSubsystem");
+        // if ((Target.Platform == UnrealTargetPlatform.Win32) || (Target.Platform == UnrealTargetPlatform.Win64))
+        // {
+        //		if (UEBuildConfiguration.bCompileSteamOSS == true)
+        //		{
+        //			DynamicallyLoadedModuleNames.Add("OnlineSubsystemSteam");
+        //		}
+        // }
+
+        // THIRD PARTY
         //PublicIncludePaths.Add(Path.Combine(ThirdPartyPath, "RapidJson", "Includes"));
         PublicIncludePaths.Add(Path.Combine(ThirdPartyPath, "RapidXml", "Includes"));
-	}
+    }
 }

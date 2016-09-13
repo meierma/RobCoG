@@ -4,3 +4,5 @@
 
 #include "Engine.h"
 
+//General Log
+DECLARE_LOG_CATEGORY_EXTERN(RobCoG, Log, All);

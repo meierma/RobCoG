@@ -3,3 +3,6 @@
 #include "RobCoG.h"
 
 IMPLEMENT_PRIMARY_GAME_MODULE( FDefaultGameModuleImpl, RobCoG, "RobCoG" );
+
+//General Log
+DEFINE_LOG_CATEGORY(RobCoG);

@@ -2,6 +2,7 @@
 
 #include "RobCoG.h"
 #include "SemLog/RSemEventsExporterSingl.h"
+#include "PhysicsEngine/PhysicsConstraintComponent.h"
 #include "RSemDrawerStateLog.h"
 
 
@@ -44,27 +45,28 @@ void ARSemDrawerStateLog::CloseDrawers()
 		{
 			// Copy of the constraint instance
 			const FConstraintInstance& CurrConstr = ConstrItr->ConstraintInstance;
+			
 
-			if (CurrConstr.LinearXMotion == ELinearConstraintMotion::LCM_Limited)
+			if (CurrConstr.GetLinearXMotion() == ELinearConstraintMotion::LCM_Limited)
 			{
 				// Add the drawer and its initial position to the map
 				DrawerToInitLocMap.Add(SMAct, SMAct->GetActorLocation());
 			}
-			else if (CurrConstr.AngularSwing1Motion == EAngularConstraintMotion::ACM_Limited)
+			else if (CurrConstr.GetAngularSwing1Motion() == EAngularConstraintMotion::ACM_Limited)
 			{
 				// Compute the min and max value of the joint
 				TPair<float, float> MinMax;
 				MinMax.Key = CurrConstr.GetCurrentSwing1();
-				MinMax.Value = MinMax.Key + FMath::DegreesToRadians(CurrConstr.Swing1LimitAngle + CurrConstr.AngularRotationOffset.Yaw);
+				MinMax.Value = MinMax.Key + FMath::DegreesToRadians(CurrConstr.GetAngularSwing1Limit() + CurrConstr.AngularRotationOffset.Yaw);
 				// Add the doors minmax pos
 				DoorToMinMaxMap.Add(SMAct, MinMax);
 			}
-			else if (CurrConstr.AngularSwing2Motion == EAngularConstraintMotion::ACM_Limited)
+			else if (CurrConstr.GetAngularSwing2Motion() == EAngularConstraintMotion::ACM_Limited)
 			{
 				// Compute the min and max value of the joint
 				TPair<float, float> MinMax;
 				MinMax.Key = CurrConstr.GetCurrentSwing2();
-				MinMax.Value = MinMax.Key - FMath::DegreesToRadians(CurrConstr.Swing2LimitAngle + CurrConstr.AngularRotationOffset.Pitch);
+				MinMax.Value = MinMax.Key - FMath::DegreesToRadians(CurrConstr.GetAngularSwing2Limit() + CurrConstr.AngularRotationOffset.Pitch);
 				// Add the doors minmax pos
 				DoorToMinMaxMap.Add(SMAct, MinMax);
 			}
@@ -95,7 +97,7 @@ void ARSemDrawerStateLog::CheckDrawerStates()
 		AActor* FurnitureAct = ConstrItr->ConstraintActor2;
 
 		// Check if it's type drawer or door (all drawers have linear X motion)
-		if (ConstrItr->ConstraintInstance.LinearXMotion == ELinearConstraintMotion::LCM_Limited)
+		if (ConstrItr->ConstraintInstance.GetLinearXMotion() == ELinearConstraintMotion::LCM_Limited)
 		{
 			const FVector CurrPos = FurnitureAct->GetActorLocation();
 			const FVector InitPos = *DrawerToInitLocMap.Find(FurnitureAct);
@@ -118,7 +120,7 @@ void ARSemDrawerStateLog::CheckDrawerStates()
 				ARSemDrawerStateLog::LogState(FurnitureAct, "HalfOpened");
 			}
 		}
-		else if(ConstrItr->ConstraintInstance.AngularSwing1Motion == EAngularConstraintMotion::ACM_Limited)
+		else if(ConstrItr->ConstraintInstance.GetAngularSwing1Motion() == EAngularConstraintMotion::ACM_Limited)
 		{
 			const float CurrPos = ConstrItr->ConstraintInstance.GetCurrentSwing1();
 			TPair<float, float> MinMax = *DoorToMinMaxMap.Find(FurnitureAct);
@@ -142,9 +144,9 @@ void ARSemDrawerStateLog::CheckDrawerStates()
 			else if (CurrPos < OpenedVal && CurrPos > HalfVal)
 			{
 				ARSemDrawerStateLog::LogState(FurnitureAct, "HalfOpened");
-			}			
+			}
 		}
-		else if (ConstrItr->ConstraintInstance.AngularSwing2Motion == EAngularConstraintMotion::ACM_Limited)
+		else if (ConstrItr->ConstraintInstance.GetAngularSwing2Motion() == EAngularConstraintMotion::ACM_Limited)
 		{
 			const float CurrPos = ConstrItr->ConstraintInstance.GetCurrentSwing2();
 			TPair<float, float> MinMax = *DoorToMinMaxMap.Find(FurnitureAct);
