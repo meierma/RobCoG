@@ -32,8 +32,8 @@ public:
 protected:
 	// Callback on finger tip collision
 	UFUNCTION()
-	void OnFingerHit(UPrimitiveComponent* SelfComp, AActor* OtherActor, UPrimitiveComponent* OtherComp,
-			FVector NormalImpulse, const FHitResult& Hit);
+	void OnFingerHit(UPrimitiveComponent* SelfComp, AActor* OtherActor, 
+		UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit);
 
 	// Hand type
 	UPROPERTY(EditAnywhere, Category = "Robcog|Motion Controller")

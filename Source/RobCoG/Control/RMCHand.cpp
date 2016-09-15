@@ -5,7 +5,7 @@
 #include "MotionControllerComponent.h"
 #include "HeadMountedDisplay.h"
 #include "RUtils.h"
-#include "RMCCharacter.h"
+#include "RMCBaseCharacter.h"
 #include "SemLog/RSemEventsExporterSingl.h"
 #include "RMCHand.h"
 
@@ -100,21 +100,15 @@ void ARMCHand::BeginPlay()
 {
 	Super::BeginPlay();
 
+	// Get the MC character 
+	ARMCBaseCharacter* BaseCharacter =
+		Cast<ARMCBaseCharacter>(UGameplayStatics::GetPlayerCharacter(GetWorld(), 0));
+
 	// Get the motion controller component for the hand
-	for (TActorIterator<ARMCCharacter> CharItr(GetWorld()); CharItr; ++CharItr)
+	if(BaseCharacter)
 	{
 		// Pointer to the motion controller component
-		MCComponent = CharItr->GetMotionControllerComponent(HandType);
-		// Stop the loop since we only need the first character (there should be only one)
-		break;
-	}
-
-	// Disable Tick if no motion controller component or character has been found
-	if ((!MCComponent))
-	{
-		SetActorTickEnabled(false);
-		UE_LOG(RobCoG, Error,
-			TEXT("No motion controller found! Tracking disabled for %s !"), *GetName());
+		MCComponent = BaseCharacter->GetMotionControllerComponent(HandType);
 	}
 
 	// Get the body to apply forces on for pose control
@@ -132,7 +126,7 @@ void ARMCHand::BeginPlay()
 	{
 		SetActorTickEnabled(false);
 		UE_LOG(RobCoG, Error,
-			TEXT("No control body was found! Tracking disabled for %s !"), *GetName());
+			TEXT("No control body [%s] was found! Tracking disabled for %s !"), *ControlBoneName.ToString(), *GetName());
 	}
 
 	///////////////////////////////////////////////////////////////////////
