@@ -94,7 +94,6 @@ ARMCHand::ARMCHand()
 	DummyStaticMesh->SetupAttachment(RootComponent);
 }
 
-
 // Called when the game starts or when spawned
 void ARMCHand::BeginPlay()
 {
@@ -103,12 +102,19 @@ void ARMCHand::BeginPlay()
 	// Get the MC character 
 	ARMCBaseCharacter* BaseCharacter =
 		Cast<ARMCBaseCharacter>(UGameplayStatics::GetPlayerCharacter(GetWorld(), 0));
-
 	// Get the motion controller component for the hand
 	if(BaseCharacter)
 	{
 		// Pointer to the motion controller component
 		MCComponent = BaseCharacter->GetMotionControllerComponent(HandType);
+	}
+	else
+	{
+		// Disable tick for hand
+		SetActorTickEnabled(false);
+		UE_LOG(RobCoG, Error,
+			TEXT("No motion control component was found! Tracking disabled for %s !"), *GetName());
+		return;
 	}
 
 	// Get the body to apply forces on for pose control
@@ -124,9 +130,11 @@ void ARMCHand::BeginPlay()
 	}
 	else
 	{
+		// Disable tick for hand
 		SetActorTickEnabled(false);
 		UE_LOG(RobCoG, Error,
 			TEXT("No control body [%s] was found! Tracking disabled for %s !"), *ControlBoneName.ToString(), *GetName());
+		return;
 	}
 
 	///////////////////////////////////////////////////////////////////////
@@ -165,21 +173,24 @@ void ARMCHand::BeginPlay()
 			// Disable collision notification for now (active only during grasping)
 			BoneBody->SetInstanceNotifyRBCollision(false);
 			// Add the body instance to the map
-			FingerBoneNameToBody.Add(BoneName, GetSkeletalMeshComponent()->GetBodyInstance(BoneName));
-
-			// Get bone name as string
-			const FString NameStr = BoneName.ToString();
+			FingerBoneNameToBody.Add(BoneName, BoneBody);
+			
 			// Iterate hand limbs type
 			for (const ERHandPart Type : FingerTypes)
 			{
 				// Get the enum type as string
 				const FString TypeName = FRUtils::GetEnumValueToString<ERHandPart>("ERHandLimb", Type);
 				// Add to finger map if the constraint name matches the finger type (name)
-				if (NameStr.Contains(TypeName))
+				if (BoneName.ToString().Contains(TypeName))
 				{
 					BoneNameToFingerTypeMap.Add(BoneName, Type);
 				}
 			}
+		}
+		else
+		{
+			UE_LOG(RobCoG, Error,
+				TEXT("Bone body [%s] was found! Tracking disabled for %s !"), *BoneName.ToString(), *GetName());
 		}
 	}
 
@@ -188,11 +199,11 @@ void ARMCHand::BeginPlay()
 
 	///////////////////////////////////////////////////////////////////////
 	// Create grasp fixating constraint
-	GraspFixatingConstraint = NewObject<UPhysicsConstraintComponent>(this, UPhysicsConstraintComponent::StaticClass());
-	//GraspFixatingConstraint->AttachToComponent(RootComponent, FAttachmentTransformRules::KeepWorldTransform);// TODO needed?
+	GraspFixationConstraint = NewObject<UPhysicsConstraintComponent>(this, UPhysicsConstraintComponent::StaticClass());
+	//GraspFixationConstraint->AttachToComponent(RootComponent, FAttachmentTransformRules::KeepWorldTransform);// TODO needed?
 
-	// Set the grasp constraint instance
-	GraspFixatingConstraint->ConstraintInstance = FixatingGraspConstraintInstance;
+	// Set the grasp(Fixation) constraint instance
+	GraspFixationConstraint->ConstraintInstance = FixatingGraspConstraintInstance;
 
 	// Create dummy actor to attach the grasped object to
 	DummyStaticMeshActor = GetWorld()->SpawnActor<AStaticMeshActor>(AStaticMeshActor::StaticClass());
@@ -229,6 +240,37 @@ void ARMCHand::BeginPlay()
 void ARMCHand::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+
+	// Get the target (motion controller) location and rotation
+	const FVector TargetLoc = MCComponent->GetComponentLocation();
+	const FQuat TargetQuat = MCComponent->GetComponentQuat();
+
+	//// Location
+	// Get the pos errors
+	const FVector LocError = TargetLoc - CurrLoc;
+	// Compute the pos output
+	const FVector LocOutput = HandPID3D.Update(LocError, DeltaTime);
+	// Apply force to the hands control body 
+	ControlBody->AddForce(LocOutput);
+	// Set the current location of the control bodies
+	CurrLoc = GetSkeletalMeshComponent()->GetBoneLocation(ControlBoneName);
+
+	//// Rotation
+	// Dot product to get costheta
+	const float CosTheta = TargetQuat | CurrQuat;
+	// Avoid taking the long path around the sphere
+	if (CosTheta < 0)
+	{
+		CurrQuat = CurrQuat * (-1.0f);
+	}
+	// Use the xyz part of the quat as the rotation velocity
+	const FQuat OutputAsQuat = TargetQuat * CurrQuat.Inverse();
+	// Get the rotation output
+	FVector RotOutput = FVector(OutputAsQuat.X, OutputAsQuat.Y, OutputAsQuat.Z) * RotOutStrength;
+	// Apply torque/angularvel to the hands control body 
+	ControlBody->SetAngularVelocity(RotOutput, false);
+	// Set the current rotation of the control bodies
+	CurrQuat = GetSkeletalMeshComponent()->GetBoneQuaternion(ControlBoneName);
 }
 
 // Hand collision callback
@@ -347,7 +389,7 @@ void ARMCHand::AttachToHand()
 				GraspedComponent->SetLinearDamping(0.0f);
 				GraspedComponent->SetAngularDamping(0.0f);
 				// Constrain components
-				GraspFixatingConstraint->SetConstrainedComponents(
+				GraspFixationConstraint->SetConstrainedComponents(
 					DummyStaticMeshActor->GetStaticMeshComponent(), NAME_None,
 					GraspedComponent, NAME_None);
 
@@ -406,7 +448,7 @@ void ARMCHand::OpenHand(const float AxisValue)
 			GraspedComponent->SetAllMassScale(1.0f);
 			GraspedComponent->SetLinearDamping(0.1f);
 			// Break constraint
-			GraspFixatingConstraint->BreakConstraint();
+			GraspFixationConstraint->BreakConstraint();
 
 			// Check if semantic event logger is initialized
 			if (FRSemEventsExporterSingl::Get().IsInit())

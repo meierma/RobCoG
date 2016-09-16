@@ -24,7 +24,8 @@ struct FRPid
 
 	// Constructor
 	FRPid(float _P = 0.0f, float _I = 0.0f, float _D = 0.0f,
-		float _OutMax = 0.0, float _OutMin = 0.0f)
+		float _OutMax = 0.0, float _OutMin = 0.0f) :
+		P(_P), I(_I), D(_D), OutMax(_OutMax), OutMin(_OutMin)
 	{
 		IErr = 0.0f;
 		PrevErr = 0.0f;

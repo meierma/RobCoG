@@ -144,7 +144,7 @@ private:
 	TMultiMap<AActor*, ERHandPart> HitActorToFingerMMap;
 
 	// Grasp physics constraint component (fixating grasp case)
-	UPhysicsConstraintComponent* GraspFixatingConstraint;
+	UPhysicsConstraintComponent* GraspFixationConstraint;
 
 	// Dummy static mesh actor (workaround for the contraint attachment directly to the skeleton issue)
 	AStaticMeshActor* DummyStaticMeshActor;

@@ -25,10 +25,11 @@ struct FRPid3d
 
 	// Constructor
 	FRPid3d(float _P = 0.0f, float _I = 0.0f, float _D = 0.0f,
-		float _OutMax = 0.0, float _OutMin = 0.0f)
+		float _OutMax = 0.0, float _OutMin = 0.0f) :
+		P(_P), I(_I), D(_D), OutMax(_OutMax), OutMin(_OutMin)
 	{
-		IErr = FVector(0.0f, 0.0f, 0.0f);
-		PrevErr = FVector(0.0f, 0.0f, 0.0f);
+		IErr = FVector(0.0f);
+		PrevErr = FVector(0.0f);
 	};
 
 	// Destructor
@@ -53,12 +54,13 @@ struct FRPid3d
 	// Error is the difference between the current state and the target
 	// DeltaT is the change in time since the last update
 	FVector Update(const FVector Error, const float DeltaT)
+
 	{
 		if (DeltaT == 0.0f)
 		{
-			return FVector(0.0f, 0.0f, 0.0f);
+			return FVector(0.0f);
 		}
-
+		
 		// Calculate proportional output
 		const FVector POut = P * Error;
 
@@ -89,8 +91,8 @@ struct FRPid3d
 	// Reset all values of the PID
 	void Reset()
 	{
-		IErr = FVector(0.0f, 0.0f, 0.0f);
-		PrevErr = FVector(0.0f, 0.0f, 0.0f);
+		IErr = FVector(0.0f);
+		PrevErr = FVector(0.0f);
 	};
 
 	// Proportional gain
