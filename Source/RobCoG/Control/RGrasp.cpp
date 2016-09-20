@@ -67,7 +67,7 @@ void FRGrasp::Update(const float Step)
 			for (FConstraintInstance* Constr : FingerConstrArr)
 			{
 				// Get the limit of the constraint
-				const float ConstrLimit = Constr->GetAngularSwing2Limit();				
+				const float ConstrLimit = Constr->GetAngularSwing2Limit();
 				// Apply orientation target if constraints are not violated
 				if (Target > ConstrLimit)
 				{
@@ -125,6 +125,8 @@ void FRGrasp::Update(const float Step)
 
 	// Update the previous step (used for checking open/close variation)
 	PrevStep = Step;
+
+	UE_LOG(RobCoG, Warning, TEXT("Grasp Update: Step : %f"), Step);
 }
 
 // Set the grasp state
