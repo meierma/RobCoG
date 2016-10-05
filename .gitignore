@@ -6,7 +6,7 @@
 /Intermediate
 /Saved
 /.vs
-/Plugins/hydra-ue4/Binaries/
+/Plugins
 *.sln
 
 # Compiled Object files
