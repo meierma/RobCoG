@@ -6,7 +6,7 @@
 #include "RWebCharacter.generated.h"
 
 // Enum of the possible selected hands
-UENUM(BlueprintType)
+UENUM()
 enum class ESelectedHand : uint8
 {
 	Right	UMETA(DisplayName = "Right"),
@@ -15,12 +15,13 @@ enum class ESelectedHand : uint8
 };
 
 // Enum of the possible actor interaction
-UENUM(BlueprintType)
+UENUM()
 enum class EItemInteraction : uint8
 {
 	Pickable				UMETA(DisplayName = "Pickable"),
 	Openable				UMETA(DisplayName = "Openable"),
-	PickableWithTwoHands	UMETA(DisplayName = "PickableWithTwoHands")
+	PickableWithTwoHands	UMETA(DisplayName = "PickableWithTwoHands"),
+	OpenableWithTwoHands	UMETA(DisplayName = "OpenableWithTwoHands")
 };
 
 
@@ -56,17 +57,38 @@ protected:
 	// Handles strafing Left/Right
 	void MoveRight(const float Val);
 
+	// Handles character crouch
+	void ToggleCrouch();
+
+	// Handles choosing hands
+	void SwitchHands();
+
+	// Handles mouse click
+	void OnSelect();
+
+	// Collect item
+	bool IteractWithItem(ESelectedHand SelectedHand, AStaticMeshActor* Item);
+
+	// Highlight objects
+	FORCEINLINE void TraceHighlight();
+
 	// Character camera
 	UCameraComponent* CharacterCamera;
+
+	// Speed factor, used for slowing/increasing the speed of the caracter
+	float SpeedFactor;
 	
 	// Set of all interactive actors
-	TMap<AActor*, EItemInteraction> InteractiveActors;
-
+	TMap<AStaticMeshActor*, EItemInteraction> InteractiveActors;
+	
 	// Currently highlighted actor
-	AActor* HighlightedActor;
+	AStaticMeshActor* HighlightedActor;
 
 	// Selected hand
 	ESelectedHand SelectedHand;
+
+	// Selected hand to picked actor
+	TMap<ESelectedHand, AStaticMeshActor*> HandToItem;
 
 
 

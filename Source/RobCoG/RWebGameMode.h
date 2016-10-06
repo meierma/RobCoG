@@ -3,17 +3,16 @@
 #pragma once
 
 #include "GameFramework/GameMode.h"
-#include "RobCoGGameMode.generated.h"
+#include "RWebGameMode.generated.h"
 
 /**
  * 
  */
 UCLASS()
-class ROBCOG_API ARobCoGGameMode : public AGameMode
+class ROBCOG_API ARWebGameMode : public AGameMode
 {
 	GENERATED_BODY()
 	
-	
-	
-	
+public:
+	ARWebGameMode();	
 };
