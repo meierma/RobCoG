@@ -3,6 +3,9 @@
 #include "RobCoG.h"
 #include "RWebCharacter.h"
 
+#define RIGHT_HAND FVector(30, 20, 40)
+#define LEFT_HAND FVector(30, -20, 40)
+#define BOTH_HANDS FVector(30, 0, 40)
 
 // Sets default values
 ARWebCharacter::ARWebCharacter()
@@ -16,7 +19,7 @@ ARWebCharacter::ARWebCharacter()
 	// Set size for collision capsule
 	GetCapsuleComponent()->InitCapsuleSize(5.f, 80.0f);
 
-	// The caracter can croush
+	// The caracter can crouch
 	//TODO set as default
 
 	// Create a CameraComponent
@@ -59,7 +62,24 @@ void ARWebCharacter::Tick( float DeltaTime )
 	Super::Tick( DeltaTime );
 
 	// Highlight interactive objects from the trace
-	ARWebCharacter::TraceHighlight();
+	ARWebCharacter::TraceAndHighlight();
+}
+
+// Called to bind functionality to input
+void ARWebCharacter::SetupPlayerInputComponent(class UInputComponent* InputComponent)
+{
+	Super::SetupPlayerInputComponent(InputComponent);
+
+	// Set up gameplay key bindings
+	InputComponent->BindAxis("MoveForward", this, &ARWebCharacter::MoveForward);
+	InputComponent->BindAxis("MoveRight", this, &ARWebCharacter::MoveRight);
+	// Default Camera view bindings
+	InputComponent->BindAxis("CameraPitch", this, &ARWebCharacter::AddControllerPitchInput);
+	InputComponent->BindAxis("CameraYaw", this, &ARWebCharacter::AddControllerYawInput);
+	// Bind actions
+	InputComponent->BindAction("Crouch", EInputEvent::IE_Pressed, this, &ARWebCharacter::ToggleCrouch);
+	InputComponent->BindAction("LeftClick", IE_Pressed, this, &ARWebCharacter::OnSelect);
+	InputComponent->BindAction("SwitchHands", IE_Pressed, this, &ARWebCharacter::SwitchHands);
 }
 
 // Init interactive intems
@@ -79,7 +99,6 @@ void ARWebCharacter::InitInteractiveItems()
 			if (CurrTag.RemoveFromStart("Interactive:"))
 			{
 				UE_LOG(RobCoG, Log, TEXT(" \t %s: "), *ActItr->GetName());
-
 				// Parse tag string into array of strings reprsenting comma separated key-value pairs
 				TArray<FString> TagKeyValueArr;
 				CurrTag.ParseIntoArray(TagKeyValueArr, TEXT(";"));
@@ -140,23 +159,6 @@ void ARWebCharacter::InitInteractiveItems()
 	}
 }
 
-// Called to bind functionality to input
-void ARWebCharacter::SetupPlayerInputComponent(class UInputComponent* InputComponent)
-{
-	Super::SetupPlayerInputComponent(InputComponent);
-
-	// Set up gameplay key bindings
-	InputComponent->BindAxis("MoveForward", this, &ARWebCharacter::MoveForward);
-	InputComponent->BindAxis("MoveRight", this, &ARWebCharacter::MoveRight);
-	// Default Camera view bindings
-	InputComponent->BindAxis("CameraPitch", this, &ARWebCharacter::AddControllerPitchInput);
-	InputComponent->BindAxis("CameraYaw", this, &ARWebCharacter::AddControllerYawInput);
-	// Bind actions
-	InputComponent->BindAction("Crouch", EInputEvent::IE_Pressed, this, &ARWebCharacter::ToggleCrouch);
-	InputComponent->BindAction("LeftClick", IE_Pressed, this, &ARWebCharacter::OnSelect);
-	InputComponent->BindAction("SwitchHands", IE_Pressed, this, &ARWebCharacter::SwitchHands);
-}
-
 // Handles moving forward/backward
 void ARWebCharacter::MoveForward(const float Value)
 {
@@ -207,6 +209,7 @@ void ARWebCharacter::ToggleCrouch()
 // Handle switching hands
 void ARWebCharacter::SwitchHands()
 {
+	// Select new hand
 	if (SelectedHand == ESelectedHand::Right)
 	{
 		SelectedHand = ESelectedHand::Left;
@@ -220,6 +223,13 @@ void ARWebCharacter::SwitchHands()
 		SelectedHand = ESelectedHand::Right;
 	}
 
+	// Remove highlight if the selected hand is occupied
+	if (HandToItem.Contains(SelectedHand) && HighlightedActor)
+	{
+		HighlightedActor->GetStaticMeshComponent()->SetRenderCustomDepth(false);
+		HighlightedActor = nullptr;
+	}
+	
 	UE_LOG(RobCoG, Warning, TEXT("Switched HAND to: %i"), (uint8)SelectedHand);
 }
 
@@ -228,12 +238,13 @@ void ARWebCharacter::OnSelect()
 {
 	if (HandToItem.Contains(SelectedHand))
 	{
-		UE_LOG(RobCoG, Warning, TEXT("Put item %s down"), *HandToItem[SelectedHand]->GetName());
-		HandToItem.Remove(SelectedHand);
+		// If selected hand is in use
+		ARWebCharacter::ReleaseActor();
 	}
 	else if (HighlightedActor)
 	{
-		ARWebCharacter::IteractWithItem(SelectedHand, HighlightedActor);
+		// If selected hand is free, and an actor is highlighted
+		ARWebCharacter::InteractWithActor();
 	}
 	else
 	{
@@ -241,49 +252,121 @@ void ARWebCharacter::OnSelect()
 	}
 }
 
-// Collect item
-bool ARWebCharacter::IteractWithItem(ESelectedHand SelectedHand, AStaticMeshActor* Item)
+// Interact with the highlighted item
+bool ARWebCharacter::InteractWithActor()
 {
-	if (InteractiveActors.Contains(Item))
+	if (InteractiveActors.Contains(HighlightedActor))
 	{
 		// Get item interaction type
-		EItemInteraction InteractionType = InteractiveActors[Item];
+		EItemInteraction InteractionType = InteractiveActors[HighlightedActor];
 		
 		if (InteractionType == EItemInteraction::Pickable)
 		{
-			// Add item to map
-			HandToItem.Add(SelectedHand, HighlightedActor);
-
-			Item->GetStaticMeshComponent()->SetSimulatePhysics(false);
-
-			Item->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
-
-
-			UE_LOG(RobCoG, Warning, TEXT("Selected item: %s is pickable"), *Item->GetName());
+			ARWebCharacter::CollectActor();
 		}
 		else if (InteractionType == EItemInteraction::Openable)
 		{
-			UE_LOG(RobCoG, Warning, TEXT("Selected item: %s is openable"), *Item->GetName());
+			ARWebCharacter::ManipulateActor();			
 		}
-
 	}
-
 	return true;
 }
 
+// Collect the highlighted item
+void ARWebCharacter::CollectActor()
+{
+	UE_LOG(RobCoG, Warning, TEXT("Selected item: %s is pickable"), *HighlightedActor->GetName());
+	// Add item to map (hand occupied)
+	HandToItem.Add(SelectedHand, HighlightedActor);
+	
+	// Disable physics, collisions and attach item to the character
+	HighlightedActor->GetStaticMeshComponent()->SetSimulatePhysics(false);
+	HighlightedActor->GetStaticMeshComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	HighlightedActor->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
+	
+	// Set the relative  position of the attached item
+	if (SelectedHand == ESelectedHand::Right)
+	{
+		HighlightedActor->SetActorRelativeLocation(RIGHT_HAND);
+	}
+	else if (SelectedHand == ESelectedHand::Left)
+	{
+		HighlightedActor->SetActorRelativeLocation(LEFT_HAND);
+	}
+	else if (SelectedHand == ESelectedHand::Both)
+	{
+		HighlightedActor->SetActorRelativeLocation(BOTH_HANDS);
+	}
+
+	// Remove highlight
+	HighlightedActor->GetStaticMeshComponent()->SetRenderCustomDepth(false);		
+	HighlightedActor = nullptr;
+}
+
+// Release the highlighted item
+void ARWebCharacter::ReleaseActor()
+{
+	if (HitResult.IsValidBlockingHit())
+	{
+		UE_LOG(RobCoG, Warning, TEXT("Put item  down"));
+
+		// Currently selected actor
+		AStaticMeshActor* CurrSelectedActor = HandToItem[SelectedHand];
+
+		// Remove object from hand
+		HandToItem.Remove(SelectedHand);
+
+		// Detach component, fix collision and physics
+		CurrSelectedActor->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+		CurrSelectedActor->GetStaticMeshComponent()->SetSimulatePhysics(true);
+		CurrSelectedActor->GetStaticMeshComponent()->bGenerateOverlapEvents = true;
+		//CurrSelectedActor->GetStaticMeshComponent()->SetNotifyRigidBodyCollision(true);
+		CurrSelectedActor->GetStaticMeshComponent()->SetCollisionProfileName("PhysicsActor");
+
+		// Set actor location
+		CurrSelectedActor->SetActorLocation(HitResult.ImpactPoint + FVector(0.f, 0.f, 10.f));
+	}
+	else
+	{
+		UE_LOG(RobCoG, Warning, TEXT("Invalid action, cannot put %s down"), *HandToItem[SelectedHand]->GetName());
+	}
+}
+
+// Open/close the highlighted item
+void ARWebCharacter::ManipulateActor()
+{
+	UE_LOG(RobCoG, Warning, TEXT("Selected item: %s is openable"), *HighlightedActor->GetName());
+}
+
 // Highlight interactive objects from trace
-FORCEINLINE void ARWebCharacter::TraceHighlight()
+FORCEINLINE void ARWebCharacter::TraceAndHighlight()
 {
 	// Vectors to trace between 
 	const FVector Start = CharacterCamera->GetComponentLocation();
 	const FVector End = Start + CharacterCamera->GetForwardVector() * MaxGraspLength;
-	// Trace data result
-	FHitResult HitResult(ForceInit);
 	// Line trace
 	GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECC_Pawn, TraceParams);
 
+	// If hand is occupied highlight release area
+	if (HandToItem.Contains(SelectedHand))
+	{
+		if (HitResult.IsValidBlockingHit())
+		{
+			// Check if the plane is horizontal
+			if (HitResult.ImpactNormal.Z > 0.9)
+			{
+				DrawDebugSphere(GetWorld(), HitResult.ImpactPoint, 2.0f, 16, FColor::Green, false, 0.05f);
+			}
+			else
+			{
+				DrawDebugSphere(GetWorld(), HitResult.ImpactPoint, 2.0f, 16, FColor::Red, false, 0.05f);
+			}
+		}
+		return;
+	}
+
 	// Check if the hit actor is of type static mesh actor
-	if (HitResult.GetActor() && HitResult.GetActor()->IsA(AStaticMeshActor::StaticClass()))
+	if (HitResult.IsValidBlockingHit() && HitResult.GetActor()->IsA(AStaticMeshActor::StaticClass()))
 	{
 		// Cast to static mesh actor and check if it is an interactive actor
 		AStaticMeshActor* HitActor = Cast<AStaticMeshActor>(HitResult.GetActor());

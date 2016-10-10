@@ -66,11 +66,20 @@ protected:
 	// Handles mouse click
 	void OnSelect();
 
-	// Collect item
-	bool IteractWithItem(ESelectedHand SelectedHand, AStaticMeshActor* Item);
+	// Interact with the highlighted item
+	bool InteractWithActor();
+
+	// Collect the highlighted item
+	void CollectActor();
+
+	// Collect the highlighted item
+	void ReleaseActor();
+
+	// Open/close the highlighted item
+	void ManipulateActor();
 
 	// Highlight objects
-	FORCEINLINE void TraceHighlight();
+	FORCEINLINE void TraceAndHighlight();
 
 	// Character camera
 	UCameraComponent* CharacterCamera;
@@ -80,6 +89,9 @@ protected:
 	
 	// Set of all interactive actors
 	TMap<AStaticMeshActor*, EItemInteraction> InteractiveActors;
+
+	// Openable actors and their opened state
+	TMap<AStaticMeshActor*, bool> InteractiveActorsToOpenedState;
 	
 	// Currently highlighted actor
 	AStaticMeshActor* HighlightedActor;
@@ -90,35 +102,10 @@ protected:
 	// Selected hand to picked actor
 	TMap<ESelectedHand, AStaticMeshActor*> HandToItem;
 
-
-
-
-	// Currently selected actor
-	AActor* SelectedActor;
-
-	// Actor in the right hand
-	AActor* RightHandSlot;
-
-	// Actor in the left hand
-	AActor* LeftHandSlot;
-
-	// Actor in both hands
-	AActor* TwoHandsSlot;
-
-
 	// Parameters for the raytrace
 	FCollisionQueryParams TraceParams;
 
-	// Start vector for raytracing
-	FVector Start;
-
-	// End vector for raytracing
-	FVector End;
-
-	// Raytrace Hit Result 
-	FHitResult HitObject;
-
-	// Hand is selected of performing an action
-	ESelectedHand ActionSelectedHand;
+	// Trace hit result
+	FHitResult HitResult;
 };
 
