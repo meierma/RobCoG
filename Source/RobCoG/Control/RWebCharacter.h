@@ -60,12 +60,18 @@ protected:
 	// Handles character crouch
 	void ToggleCrouch();
 
+	// Smooth crouch
+	void SmoothCrouch();
+
+	// Smooth stand up
+	void SmoothStandUp();
+
 	// Handles choosing hands
 	void SwitchHands();
 
 	// Handles mouse click
 	void OnSelect();
-
+	
 	// Interact with the highlighted item
 	bool InteractWithActor();
 
@@ -78,14 +84,35 @@ protected:
 	// Open/close the highlighted item
 	void ManipulateActor();
 
-	// Highlight objects
+	// Set cloned actor, used for highlighting release positions
+	void SetHighlightClone(AStaticMeshActor* ActorToClone);
+
+	// Set cloned actor, used for highlighting release positions
+	FORCEINLINE void RemoveHighlightClone();
+
+	// Trace and highlight manipulation
 	FORCEINLINE void TraceAndHighlight();
+
+	// Highlight release area
+	FORCEINLINE void HighlightRelease();
+
+	// Highlight interaction
+	FORCEINLINE void HighlightInteraction();
 
 	// Character camera
 	UCameraComponent* CharacterCamera;
 
 	// Speed factor, used for slowing/increasing the speed of the caracter
 	float SpeedFactor;
+
+	// Smooth crouch timer handle
+	FTimerHandle SmoothCrouchTimerHandle;
+
+	// Standing height
+	float StandingHeight;
+
+	// In crouch position
+	bool bIsCrouched;
 	
 	// Set of all interactive actors
 	TMap<AStaticMeshActor*, EItemInteraction> InteractiveActors;
@@ -95,6 +122,9 @@ protected:
 	
 	// Currently highlighted actor
 	AStaticMeshActor* HighlightedActor;
+
+	// Highlight clone actor, used for highlighting release positions
+	AStaticMeshActor* HighlightClone;
 
 	// Selected hand
 	ESelectedHand SelectedHand;

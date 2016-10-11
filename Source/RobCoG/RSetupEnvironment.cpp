@@ -6,7 +6,6 @@
 #include "SLContactTriggerBox.h"
 #include "RSetupEnvironment.h"
 
-
 // Sets default values
 ARSetupEnvironment::ARSetupEnvironment()
 {
