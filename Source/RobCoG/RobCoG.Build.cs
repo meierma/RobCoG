@@ -30,7 +30,8 @@ public class RobCoG : ModuleRules
         PrivateDependencyModuleNames.AddRange(new string[] {
             "HeadMountedDisplay",
             "SteamVR",
-            "SemLog"
+            //"SemLog"
+            "USemLog"
          });
 
         // Uncomment if you are using Slate UI

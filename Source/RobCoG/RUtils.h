@@ -44,19 +44,19 @@ GENERATED_USTRUCT_BODY()
 		return FString(RandString.c_str());
 	}
 
-	// Convert FString to const char*
-	static FORCEINLINE const char* FStringToChar(const FString FStr)
-	{
-		const std::string str = TCHAR_TO_UTF8(*FStr);
-		char *cstr = new char[str.length() + 1];
-		strcpy(cstr, str.c_str());
-		return cstr;
+	//// Convert FString to const char*
+	//static FORCEINLINE const char* FStringToChar(const FString FStr)
+	//{
+	//	const std::string str = TCHAR_TO_UTF8(*FStr);
+	//	char *cstr = new char[str.length() + 1];
+	//	strcpy(cstr, str.c_str());
+	//	return cstr;
 
-		//std::string str = TCHAR_TO_UTF8(*FStr);
-		//char* cstr = (char *)malloc(sizeof(char) * (str.length() + 1));
-		//strncpy_s(cstr, str.length(), str.c_str(), str.length());
-		//return cstr;
-	}
+	//	//std::string str = TCHAR_TO_UTF8(*FStr);
+	//	//char* cstr = (char *)malloc(sizeof(char) * (str.length() + 1));
+	//	//strncpy_s(cstr, str.length(), str.c_str(), str.length());
+	//	//return cstr;
+	//}
 
 	// Get the enum value to string
 	template<typename TEnum>

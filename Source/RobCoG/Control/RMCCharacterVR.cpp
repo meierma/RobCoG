@@ -41,7 +41,7 @@ void ARMCCharacterVR::BeginPlay()
 }
 
 // Called to bind functionality to input
-void ARMCCharacterVR::SetupPlayerInputComponent(class UInputComponent* InputComponent)
+void ARMCCharacterVR::SetupPlayerInputComponent(class UInputComponent* InputComp)
 {
-	Super::SetupPlayerInputComponent(InputComponent);
+	Super::SetupPlayerInputComponent(InputComp);
 }

@@ -74,9 +74,9 @@ void ARMCBaseCharacter::BeginPlay()
 }
 
 // Called to bind functionality to input
-void ARMCBaseCharacter::SetupPlayerInputComponent(class UInputComponent* InputComponent)
+void ARMCBaseCharacter::SetupPlayerInputComponent(class UInputComponent* InputComp)
 {
-	Super::SetupPlayerInputComponent(InputComponent);
+	Super::SetupPlayerInputComponent(InputComp);
 
 }
 

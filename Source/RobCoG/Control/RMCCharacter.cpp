@@ -19,16 +19,16 @@ void ARMCCharacter::BeginPlay()
 }
 
 // Called to bind functionality to input
-void ARMCCharacter::SetupPlayerInputComponent(class UInputComponent* InputComponent)
+void ARMCCharacter::SetupPlayerInputComponent(class UInputComponent* InputComp)
 {
-	Super::SetupPlayerInputComponent(InputComponent);
+	Super::SetupPlayerInputComponent(InputComp);
 
 	// Set up gameplay key bindings
-	InputComponent->BindAxis("MoveForward", this, &ARMCCharacter::MoveForward);
-	InputComponent->BindAxis("MoveRight", this, &ARMCCharacter::MoveRight);
+	InputComp->BindAxis("MoveForward", this, &ARMCCharacter::MoveForward);
+	InputComp->BindAxis("MoveRight", this, &ARMCCharacter::MoveRight);
 	// Default Camera view bindings
-	InputComponent->BindAxis("CameraPitch", this, &ARMCCharacter::AddControllerPitchInput);
-	InputComponent->BindAxis("CameraYaw", this, &ARMCCharacter::AddControllerYawInput);
+	InputComp->BindAxis("CameraPitch", this, &ARMCCharacter::AddControllerPitchInput);
+	InputComp->BindAxis("CameraYaw", this, &ARMCCharacter::AddControllerYawInput);
 }
 
 // Handles moving forward/backward
