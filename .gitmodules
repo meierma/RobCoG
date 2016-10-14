@@ -1,0 +1,3 @@
+[submodule "Plugins/USemLog"]
+	path = Plugins/USemLog
+	url = https://github.com/andreihaidu/USemLog.git
