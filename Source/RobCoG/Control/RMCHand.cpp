@@ -6,7 +6,7 @@
 #include "HeadMountedDisplay.h"
 #include "RUtils.h"
 #include "RMCBaseCharacter.h"
-#include "SemLog/RSemEventsExporterSingl.h"
+//#include "SemLog/RSemEventsExporterSingl.h"
 #include "RMCHand.h"
 
 // Sets default values
@@ -396,12 +396,12 @@ void ARMCHand::AttachToHand()
 				// Set state to attached
 				Grasp->SetState(ERGraspState::Attached);
 
-				// Check if semantic event logger is initialized
-				if (FRSemEventsExporterSingl::Get().IsInit())
-				{
-					FRSemEventsExporterSingl::Get().BeginGraspingEvent(
-						this, ActToCountItr.Key, GetWorld()->GetTimeSeconds());
-				}
+				//// Check if semantic event logger is initialized
+				//if (FRSemEventsExporterSingl::Get().IsInit())
+				//{
+				//	FRSemEventsExporterSingl::Get().BeginGraspingEvent(
+				//		this, ActToCountItr.Key, GetWorld()->GetTimeSeconds());
+				//}
 
 				// Attachment constroller feedback
 				FLatentActionInfo ActionInfo;
@@ -450,12 +450,12 @@ void ARMCHand::OpenHand(const float AxisValue)
 			// Break constraint
 			GraspFixationConstraint->BreakConstraint();
 
-			// Check if semantic event logger is initialized
-			if (FRSemEventsExporterSingl::Get().IsInit())
-			{
-				FRSemEventsExporterSingl::Get().EndGraspingEvent(
-					this, GraspedComponent->GetAttachmentRootActor(), GetWorld()->GetTimeSeconds());
-			}
+			//// Check if semantic event logger is initialized
+			//if (FRSemEventsExporterSingl::Get().IsInit())
+			//{
+			//	FRSemEventsExporterSingl::Get().EndGraspingEvent(
+			//		this, GraspedComponent->GetAttachmentRootActor(), GetWorld()->GetTimeSeconds());
+			//}
 
 			FLatentActionInfo ActionInfo;
 			ActionInfo.CallbackTarget = this;

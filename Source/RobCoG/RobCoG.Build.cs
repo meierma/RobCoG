@@ -20,7 +20,7 @@ public class RobCoG : ModuleRules
             "InputCore",
             "Json",
             "JsonUtilities",
-			"XmlParser"
+			//"XmlParser"
 			//"HydraPlugin",
 			//"HeadMountedDisplay",
 			//"PhysX",
@@ -48,6 +48,6 @@ public class RobCoG : ModuleRules
 
         // THIRD PARTY
         //PublicIncludePaths.Add(Path.Combine(ThirdPartyPath, "RapidJson", "Includes"));
-        PublicIncludePaths.Add(Path.Combine(ThirdPartyPath, "RapidXml", "Includes"));
+        //PublicIncludePaths.Add(Path.Combine(ThirdPartyPath, "RapidXml", "Includes"));
     }
 }

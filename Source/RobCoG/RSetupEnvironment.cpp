@@ -5,7 +5,6 @@
 #include "SLManager.h"
 #include "SLContactTriggerBox.h"
 #include "RSetupEnvironment.h"
-#include "XmlParser.h"
 
 // Sets default values
 ARSetupEnvironment::ARSetupEnvironment()
