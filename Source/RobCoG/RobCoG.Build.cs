@@ -20,7 +20,7 @@ public class RobCoG : ModuleRules
             "InputCore",
             "Json",
             "JsonUtilities",
-			//"XmlParser"
+			"XmlParser"
 			//"HydraPlugin",
 			//"HeadMountedDisplay",
 			//"PhysX",

@@ -46,7 +46,7 @@ public:
 	// Maximum arm length for grasping
 	UPROPERTY(EditAnywhere, Category = "Robcog")
 	float MaxGraspLength;
-
+	
 protected:
 	// Initialize interactive items
 	void InitInteractiveItems();
@@ -66,12 +66,21 @@ protected:
 	// Smooth stand up
 	void SmoothStandUp();
 
+	// Handles item selection
+	void OnSelect();
+
 	// Handles choosing hands
 	void SwitchHands();
-
-	// Handles mouse click
-	void OnSelect();
 	
+	// Switch rotation axis of the selected actor
+	void SwitchRotAxis();
+
+	// Rotate selected actor into positive direction
+	void RotatePos();
+
+	// Rotate selected actor into negative direction
+	void RotateNeg();
+
 	// Interact with the highlighted item
 	bool InteractWithActor();
 
@@ -96,6 +105,12 @@ protected:
 	// Highlight release area
 	FORCEINLINE void HighlightRelease();
 
+	// Calculate the offset from the plane
+	FORCEINLINE void CalculatePlaneOffset();
+
+	// Check release collisions
+	FORCEINLINE bool IsCollidingAtRelease();
+
 	// Highlight interaction
 	FORCEINLINE void HighlightInteraction();
 
@@ -119,12 +134,6 @@ protected:
 
 	// Openable actors and their opened state
 	TMap<AStaticMeshActor*, bool> InteractiveActorsToOpenedState;
-	
-	// Currently highlighted actor
-	AStaticMeshActor* HighlightedActor;
-
-	// Highlight clone actor, used for highlighting release positions
-	AStaticMeshActor* HighlightClone;
 
 	// Selected hand
 	ESelectedHand SelectedHand;
@@ -132,10 +141,28 @@ protected:
 	// Selected hand to picked actor
 	TMap<ESelectedHand, AStaticMeshActor*> HandToItem;
 
-	// Parameters for the raytrace
-	FCollisionQueryParams TraceParams;
-
 	// Trace hit result
 	FHitResult HitResult;
+
+	// Currently highlighted actor
+	AStaticMeshActor* HighlightedActor;
+
+	// Highlight clone actor, used for highlighting release positions
+	AStaticMeshActor* HighlightClone;
+
+	// Highlight clone release offset
+	FVector HCReleaseOffset;
+
+	// Highlight clone material green
+	UMaterialInstanceConstant* HCGreenMat;
+
+	// Highlight clone material red
+	UMaterialInstanceConstant* HCRedMat;
+
+	// Flag showing current material (avoids re-setting the same material)
+	bool bIsGreen;
+
+	// Rotator axis used for rotating the selected object
+	uint8 RotAxisIndex;
 };
 

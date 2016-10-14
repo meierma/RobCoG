@@ -2,6 +2,7 @@
 *.db
 *.opendb
 /Binaries
+/Build
 /DerivedDataCache
 /Intermediate
 /Saved

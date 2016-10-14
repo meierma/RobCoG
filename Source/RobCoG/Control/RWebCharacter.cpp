@@ -13,15 +13,23 @@ ARWebCharacter::ARWebCharacter()
 {
  	// Set this character to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
-
 	// Set this pawn to be controlled by the lowest-numbered player
 	AutoPossessPlayer = EAutoReceiveInput::Player0;
 
 	// Set size for collision capsule
 	GetCapsuleComponent()->InitCapsuleSize(5.f, 80.0f);
-
 	// Smooth crouch flag
 	bIsCrouched = false;
+	// Set the maximum grasping length (Length of the 'hands' of the character)
+	MaxGraspLength = 100.f;
+	// Speed factor default value
+	SpeedFactor = 1.0f;
+	// Default selected hand (right)
+	SelectedHand = ESelectedHand::Right;
+	// Flag of currently selected materisl (avoids re-setting the same material)
+	bIsGreen = false;
+	// Default rotation index
+	RotAxisIndex = 0;
 
 	// Create a CameraComponent
 	CharacterCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("CharacterCamera"));
@@ -32,20 +40,11 @@ ARWebCharacter::ARWebCharacter()
 	// Allow the pawn to control the camera rotation
 	CharacterCamera->bUsePawnControlRotation = true;
 	
-	//Initialize TraceParams parameter
-	TraceParams = FCollisionQueryParams(FName(TEXT("Trace")), true, this);
-	TraceParams.bTraceComplex = true;
-	//TraceParams.bTraceAsyncScene = true;
-	TraceParams.bReturnPhysicalMaterial = false;
-
-	// Set the maximum grasping length (Length of the 'hands' of the character)
-	MaxGraspLength = 100.f;
-
-	// Speed factor default value
-	SpeedFactor = 1.0f;
-
-	// Default selected hand (right)
-	SelectedHand = ESelectedHand::Right;
+	// Highlight materials
+	HCGreenMat = ConstructorHelpers::FObjectFinderOptional<UMaterialInstanceConstant>(
+		TEXT("MaterialInstanceConstant'/Game/Highlights/M_HighlightClone_Green_Inst.M_HighlightClone_Green_Inst'")).Get();
+	HCRedMat = ConstructorHelpers::FObjectFinderOptional<UMaterialInstanceConstant>(
+		TEXT("MaterialInstanceConstant'/Game/Highlights/M_HighlightClone_Red_Inst.M_HighlightClone_Red_Inst'")).Get();
 }
 
 // Called when the game starts or when spawned
@@ -55,6 +54,12 @@ void ARWebCharacter::BeginPlay()
 
 	// Standing height
 	StandingHeight = GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+
+	// Check if materials are present
+	if (!HCGreenMat || !HCRedMat)
+	{
+		UE_LOG(RobCoG, Error, TEXT(" !! ARWebCharacter: No highlight materials found!"));
+	}
 	
 	// Init items that can interact with the character
 	ARWebCharacter::InitInteractiveItems();
@@ -82,8 +87,12 @@ void ARWebCharacter::SetupPlayerInputComponent(class UInputComponent* InputComp)
 	InputComp->BindAxis("CameraYaw", this, &ARWebCharacter::AddControllerYawInput);
 	// Bind actions
 	InputComp->BindAction("Crouch", EInputEvent::IE_Pressed, this, &ARWebCharacter::ToggleCrouch);
-	InputComp->BindAction("LeftClick", IE_Pressed, this, &ARWebCharacter::OnSelect);
+	InputComp->BindAction("Select", IE_Pressed, this, &ARWebCharacter::OnSelect);
 	InputComp->BindAction("SwitchHands", IE_Pressed, this, &ARWebCharacter::SwitchHands);
+	// Bind object rotation
+	InputComp->BindAction("SwitchRotationAxis", EInputEvent::IE_Pressed, this, &ARWebCharacter::SwitchRotAxis);
+	InputComp->BindAction("RotatePos", IE_Pressed, this, &ARWebCharacter::RotatePos);
+	InputComp->BindAction("RotateNeg", IE_Pressed, this, &ARWebCharacter::RotateNeg);
 }
 
 // Init interactive intems
@@ -203,7 +212,7 @@ void ARWebCharacter::ToggleCrouch()
 	{
 		// Callback to crouch character
 		GetWorldTimerManager().SetTimer(
-			SmoothCrouchTimerHandle, this, &ARWebCharacter::SmoothCrouch, 0.01f, true);
+			SmoothCrouchTimerHandle, this, &ARWebCharacter::SmoothCrouch, 0.001f, true);
 		// Set crouch flag
 		bIsCrouched = true;
 		// Slow down movement
@@ -213,7 +222,7 @@ void ARWebCharacter::ToggleCrouch()
 	{
 		// Callback to bring up character
 		GetWorldTimerManager().SetTimer(
-			SmoothCrouchTimerHandle, this, &ARWebCharacter::SmoothStandUp, 0.02f, true);
+			SmoothCrouchTimerHandle, this, &ARWebCharacter::SmoothStandUp, 0.001f, true);
 		// Set crouch flag
 		bIsCrouched = false;
 	}
@@ -224,7 +233,7 @@ void ARWebCharacter::SmoothCrouch()
 {
 	// Current height of the capsule
 	const float CurrHeight = GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
-	GetCapsuleComponent()->SetCapsuleHalfHeight(CurrHeight - 0.5f);
+	GetCapsuleComponent()->SetCapsuleHalfHeight(CurrHeight - 0.1f);
 	
 	if (CurrHeight <= (StandingHeight * 0.4))
 	{
@@ -238,7 +247,7 @@ void ARWebCharacter::SmoothStandUp()
 {
 	// Current height of the capsule
 	const float CurrHeight = GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
-	GetCapsuleComponent()->SetCapsuleHalfHeight(CurrHeight + 0.5f);
+	GetCapsuleComponent()->SetCapsuleHalfHeight(CurrHeight + 0.1f);
 
 	if (CurrHeight >= StandingHeight)
 	{
@@ -247,44 +256,6 @@ void ARWebCharacter::SmoothStandUp()
 		// Clear stand up timer
 		GetWorldTimerManager().ClearTimer(SmoothCrouchTimerHandle);
 	}
-}
-
-// Handle switching hands
-void ARWebCharacter::SwitchHands()
-{
-	// Select new hand
-	if (SelectedHand == ESelectedHand::Right)
-	{
-		SelectedHand = ESelectedHand::Left;
-	}
-	else if (SelectedHand == ESelectedHand::Left)
-	{
-		SelectedHand = ESelectedHand::Both;
-	}
-	else
-	{
-		SelectedHand = ESelectedHand::Right;
-	}
-
-	// Remove old clone
-	ARWebCharacter::RemoveHighlightClone();
-
-	// If the currently selected hand is occupied 
-	if (HandToItem.Contains(SelectedHand))
-	{
-		// Set new clone
-		ARWebCharacter::SetHighlightClone(HandToItem[SelectedHand]);	
-		
-		if (HighlightedActor)
-		{
-			// Remove interaction highlight since we are looking for release highlight
-			HighlightedActor->GetStaticMeshComponent()->SetRenderCustomDepth(false);
-			HighlightedActor = nullptr;
-		}
-	}
-
-	// TODO vis in gui
-	UE_LOG(RobCoG, Warning, TEXT("Switched HAND to: %i"), (uint8)SelectedHand);
 }
 
 // Handles mouse click
@@ -303,6 +274,127 @@ void ARWebCharacter::OnSelect()
 	else
 	{
 		UE_LOG(RobCoG, Warning, TEXT(" ** ARWebCharacter: Invalid action!"));
+	}
+}
+
+// Handle switching hands
+void ARWebCharacter::SwitchHands()
+{
+	// Select new hand
+	if (SelectedHand == ESelectedHand::Right)
+	{
+		SelectedHand = ESelectedHand::Left;
+		UE_LOG(RobCoG, Warning, TEXT(" ** Selected hand: LEFT"));
+	}
+	else if (SelectedHand == ESelectedHand::Left)
+	{
+		// If both hands are free, switch to both
+		if (!HandToItem.Contains(ESelectedHand::Left) && !HandToItem.Contains(ESelectedHand::Right))
+		{
+			SelectedHand = ESelectedHand::Both;
+			UE_LOG(RobCoG, Warning, TEXT(" ** Selected hand: BOTH"));
+		}
+		else
+		{
+			SelectedHand = ESelectedHand::Right;
+			UE_LOG(RobCoG, Warning, TEXT(" ** Selected hand: RIGHT"));
+		}
+	}
+	else if (SelectedHand == ESelectedHand::Both)
+	{
+		if (!HandToItem.Contains(ESelectedHand::Both))
+		{
+			// If both hands are empty, switch to right
+			SelectedHand = ESelectedHand::Right;
+			UE_LOG(RobCoG, Warning, TEXT(" ** Selected hand: RIGHT"));
+		}
+		else
+		{
+			return;
+		}
+	}
+
+	// Remove old clone
+	ARWebCharacter::RemoveHighlightClone();
+
+	// Create new highlight clone if the currently selected hand is occupied 
+	if (HandToItem.Contains(SelectedHand))
+	{
+		// Set new clone
+		ARWebCharacter::SetHighlightClone(HandToItem[SelectedHand]);	
+		
+		// Remove interaction highlight is there is one currently
+		if (HighlightedActor)
+		{
+			HighlightedActor->GetStaticMeshComponent()->SetRenderCustomDepth(false);
+			HighlightedActor = nullptr;
+		}
+	}
+}
+
+// Switch rotation axis of the selected actor
+void ARWebCharacter::SwitchRotAxis()
+{
+	//Increment the index which coresponds to rotation axis
+	RotAxisIndex++;
+	if (RotAxisIndex > 2)
+	{
+		RotAxisIndex = 0;
+	}
+	UE_LOG(RobCoG, Warning, TEXT(" ** Rot Index: %i"), RotAxisIndex);
+}
+
+// Rotate selected actor into positive direction
+void ARWebCharacter::RotatePos()
+{
+	if (HighlightClone)
+	{
+		switch (RotAxisIndex)
+		{
+		case 0: 		
+			//HighlightClone->AddActorLocalRotation(FRotator(0.f, 10.f, 0.f)); // Yaw
+			HighlightClone->AddActorWorldRotation(FRotator(0.f, 10.f, 0.f)); // Yaw
+			break;
+		case 1: 
+			//HighlightClone->AddActorLocalRotation(FRotator(10.f, 0.f, 0.f)); // Pitch
+			HighlightClone->AddActorWorldRotation(FRotator(10.f, 0.f, 0.f)); // Pitch
+			break;
+		case 2: 
+			//HighlightClone->AddActorLocalRotation(FRotator(0.f, 0.f, 10.f)); // Roll
+			HighlightClone->AddActorWorldRotation(FRotator(0.f, 0.f, 10.f)); // Roll
+			break;
+		default:
+			return;
+		}
+		// Calculate new release plane offset
+		ARWebCharacter::CalculatePlaneOffset();
+	}
+}
+
+// Rotate selected actor into negative direction
+void ARWebCharacter::RotateNeg()
+{
+	if (HighlightClone)
+	{
+		switch (RotAxisIndex)
+		{
+		case 0:
+			//HighlightClone->AddActorLocalRotation(FRotator(0.f, -10.f, 0.f)); // Yaw
+			HighlightClone->AddActorWorldRotation(FRotator(0.f, -10.f, 0.f)); // Yaw
+			break;
+		case 1:
+			//HighlightClone->AddActorLocalRotation(FRotator(-10.f, 0.f, 0.f)); // Pitch
+			HighlightClone->AddActorWorldRotation(FRotator(-10.f, 0.f, 0.f)); // Pitch
+			break;
+		case 2:
+			//HighlightClone->AddActorLocalRotation(FRotator(0.f, 0.f, -10.f)); // Roll
+			HighlightClone->AddActorWorldRotation(FRotator(0.f, 0.f, -10.f)); // Roll
+			break;
+		default:
+			return;
+		}
+		// Calculate new release plane offset
+		ARWebCharacter::CalculatePlaneOffset();
 	}
 }
 
@@ -335,7 +427,7 @@ void ARWebCharacter::CollectActor()
 	// Disable physics, collisions and attach item to the character
 	HighlightedActor->GetStaticMeshComponent()->SetSimulatePhysics(false);
 	HighlightedActor->GetStaticMeshComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	HighlightedActor->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
+	HighlightedActor->AttachToActor(this, FAttachmentTransformRules::KeepRelativeTransform);
 	
 	// Set the relative  position of the attached item
 	if (SelectedHand == ESelectedHand::Right)
@@ -362,10 +454,9 @@ void ARWebCharacter::CollectActor()
 // Release the highlighted item
 void ARWebCharacter::ReleaseActor()
 {
-	if (HitResult.IsValidBlockingHit())
+	// Release if the highlighted clone is green
+	if (HitResult.IsValidBlockingHit() && bIsGreen)
 	{
-		UE_LOG(RobCoG, Warning, TEXT("Put item  down"));
-
 		// Currently selected actor
 		AStaticMeshActor* CurrSelectedActor = HandToItem[SelectedHand];
 
@@ -380,15 +471,15 @@ void ARWebCharacter::ReleaseActor()
 		CurrSelectedActor->GetStaticMeshComponent()->SetCollisionProfileName("PhysicsActor");
 
 		// Set actor location
-		//CurrSelectedActor->SetActorLocation(HitResult.ImpactPoint + FVector(0.f, 0.f, 10.f));
-		CurrSelectedActor->SetActorLocation(HighlightClone->GetActorLocation());
+		CurrSelectedActor->SetActorLocationAndRotation(
+			HighlightClone->GetActorLocation(), HighlightClone->GetActorQuat());
 
 		// Remove highlight clone
 		ARWebCharacter::RemoveHighlightClone();
 	}
 	else
 	{
-		UE_LOG(RobCoG, Warning, TEXT("Invalid action, cannot put %s down"), *HandToItem[SelectedHand]->GetName());
+		UE_LOG(RobCoG, Warning, TEXT(" ** ARWebCharacter: Cannot put %s down."), *HandToItem[SelectedHand]->GetName());
 	}
 }
 
@@ -431,6 +522,13 @@ void ARWebCharacter::SetHighlightClone(AStaticMeshActor* ActorToClone)
 	// Create the clone from the actor
 	HighlightClone = GetWorld()->SpawnActorAbsolute<AStaticMeshActor>(
 		ActorToClone->GetClass(), ActorToClone->GetTransform(), SpawnParam);
+	
+	// Set default highlight material to red
+	bIsGreen = false;
+	HighlightClone->GetStaticMeshComponent()->SetMaterial(0, HCRedMat);
+
+	// Plane collision offset
+	ARWebCharacter::CalculatePlaneOffset();
 
 	// Set physics, collisions properties
 	HighlightClone->GetStaticMeshComponent()->SetSimulatePhysics(false);
@@ -448,6 +546,7 @@ FORCEINLINE void ARWebCharacter::RemoveHighlightClone()
 		HighlightClone->SetActorHiddenInGame(true);
 		HighlightClone->SetActorEnableCollision(false);
 		//HighlightClone->Destroy();
+		RotAxisIndex = 0;
 	}
 }
 
@@ -458,8 +557,7 @@ FORCEINLINE void ARWebCharacter::TraceAndHighlight()
 	const FVector Start = CharacterCamera->GetComponentLocation();
 	const FVector End = Start + CharacterCamera->GetForwardVector() * MaxGraspLength;
 	// Line trace
-	GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECC_Pawn, TraceParams);
-
+	GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECC_Pawn);
 
 	if (HandToItem.Contains(SelectedHand))
 	{
@@ -484,39 +582,92 @@ FORCEINLINE void ARWebCharacter::HighlightRelease()
 {
 	if (HitResult.IsValidBlockingHit())
 	{
-		// Check if the plane is horizontal
-		if (HitResult.ImpactNormal.Z > 0.9)
-		{
-			// Draw cloned actor with green
-			if (HighlightClone)
+		// Set HC actor location
+		HighlightClone->SetActorLocation(HitResult.ImpactPoint + HCReleaseOffset);
+		// Set to visible
+		HighlightClone->SetActorHiddenInGame(false);
+
+		if (HitResult.ImpactNormal.Z > 0.9 && !IsCollidingAtRelease())
+		{	
+			// Draw HC with green, if plane is horizontal and no collisions are present
+			if (!bIsGreen)
 			{
-				HighlightClone->SetActorHiddenInGame(false);
-				HighlightClone->SetActorLocation(HitResult.ImpactPoint);
-			}
-			else
-			{
-				DrawDebugSphere(GetWorld(), HitResult.ImpactPoint, 2.0f, 16, FColor::Green, false, 0.05f);
+				HighlightClone->GetStaticMeshComponent()->SetMaterial(0, HCGreenMat);
+				bIsGreen = true;
 			}
 		}
 		else
 		{
 			// Draw cloned actor with red
-			if (HighlightClone)
+			if (bIsGreen)
 			{
-				HighlightClone->SetActorHiddenInGame(false);
-				HighlightClone->SetActorLocation(HitResult.ImpactPoint);
-			}
-			else
-			{
-				DrawDebugSphere(GetWorld(), HitResult.ImpactPoint, 2.0f, 16, FColor::Red, false, 0.05f);
+				HighlightClone->GetStaticMeshComponent()->SetMaterial(0, HCRedMat);
+				bIsGreen = false;
 			}
 		}
 	}
 	else
-	{
+	{		
 		HighlightClone->SetActorHiddenInGame(true);
 	}
 	return;
+}
+
+// Calculate plane offset
+FORCEINLINE void ARWebCharacter::CalculatePlaneOffset()
+{
+	HCReleaseOffset = FVector(0.f, 0.f, HighlightClone->GetComponentsBoundingBox(true).GetExtent().Z + 0.5f);
+}
+
+// Check if object is colliding at release
+FORCEINLINE bool ARWebCharacter::IsCollidingAtRelease()
+{
+	FHitResult OutHit;
+	const FVector Loc = HighlightClone->GetActorLocation();
+	// Sweep current location plus a small offset (apparently Start and End loc need to differ)
+	const bool Hit = GetWorld()->SweepSingleByChannel(OutHit, Loc, Loc + FVector(0.f, 0.f, 0.1f),
+		HighlightClone->GetActorQuat(),	ECollisionChannel::ECC_Pawn,
+		HighlightClone->GetStaticMeshComponent()->GetCollisionShape(-2.5f));
+
+	//if (Hit)
+	//{
+	//	DrawDebugPoint(GetWorld(), OutHit.ImpactPoint, 10.f, FColor::Blue, false, 0.5);
+
+	//	if (HighlightClone->GetStaticMeshComponent()->GetCollisionShape().IsBox())
+	//	{
+	//		UE_LOG(RobCoG, Warning, TEXT("BOX Collision: %s"), *OutHit.GetActor()->GetName());
+
+	//		DrawDebugBox(GetWorld(), OutHit.ImpactPoint, 
+	//			HighlightClone->GetStaticMeshComponent()->GetCollisionShape(-2.5f).GetExtent(),
+	//			FColor::Blue, false, 0.5f);
+
+	//	}
+	//	else if (HighlightClone->GetStaticMeshComponent()->GetCollisionShape().IsCapsule())
+	//	{
+	//		UE_LOG(RobCoG, Warning, TEXT("CAPSULE Collision: %s"), *OutHit.GetActor()->GetName());
+	//		
+	//		DrawDebugCapsule(GetWorld(), OutHit.ImpactPoint,
+	//			HighlightClone->GetStaticMeshComponent()->GetCollisionShape().GetCapsuleHalfHeight(),
+	//			HighlightClone->GetStaticMeshComponent()->GetCollisionShape().GetCapsuleRadius(),
+	//			HighlightClone->GetStaticMeshComponent()->GetComponentQuat(),
+	//			FColor::Blue, false, 0.5f);
+
+	//	}
+	//	else if (HighlightClone->GetStaticMeshComponent()->GetCollisionShape().IsSphere())
+	//	{
+	//		UE_LOG(RobCoG, Warning, TEXT("SPHERE Collision: %s"), *OutHit.GetActor()->GetName());
+	//	}
+	//	else
+	//	{
+	//		UE_LOG(RobCoG, Warning, TEXT("OTHER Collision: %s"), *OutHit.GetActor()->GetName());
+	//	}
+	//}
+	//else
+	//{
+	//	UE_LOG(RobCoG, Warning, TEXT("NO Collision!"));
+	//}
+	
+	return Hit;
 }
 
 // Highlight interaction
@@ -554,3 +705,4 @@ FORCEINLINE void ARWebCharacter::HighlightInteraction()
 		HighlightedActor = nullptr;
 	}
 }
+
