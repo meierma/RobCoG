@@ -6,6 +6,8 @@
 #include "SLContactTriggerBox.h"
 #include "RSetupEnvironment.h"
 
+#define IMPULSE -1000.0f
+
 // Sets default values
 ARSetupEnvironment::ARSetupEnvironment()
 {
@@ -42,7 +44,7 @@ void ARSetupEnvironment::CloseFurnitures()
 		if (SMAct)
 		{
 			// Add impule to static mesh in order to close the drawer/door
-			SMAct->GetStaticMeshComponent()->AddImpulse(FVector(-900) * SMAct->GetActorForwardVector());
+			SMAct->GetStaticMeshComponent()->AddImpulse(FVector(IMPULSE) * SMAct->GetActorForwardVector());
 		}
 	}
 

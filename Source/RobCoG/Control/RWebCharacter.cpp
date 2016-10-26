@@ -3,10 +3,11 @@
 #include "RobCoG.h"
 #include "RWebCharacter.h"
 
-#define RIGHT_HAND FVector(20, 20, 30)
-#define LEFT_HAND FVector(20, -20, 30)
-#define BOTH_HANDS FVector(20, 0, 30)
-#define IMPULSE FVector(1000)
+#define RIGHT_HAND FVector(10.f, 20.f, 25.f)
+#define LEFT_HAND FVector(10.f, -20.f, 25.f)
+#define BOTH_HANDS FVector(5.f, 0.f, 25.f)
+#define IMPULSE FVector(1500.f)
+#define MAX_STACK_HEIGHT 20.0f
 
 // Sets default values
 ARWebCharacter::ARWebCharacter()
@@ -28,6 +29,8 @@ ARWebCharacter::ARWebCharacter()
 	SelectedHand = ESelectedHand::Right;
 	// Flag of currently selected materisl (avoids re-setting the same material)
 	bIsGreen = false;
+	// Flag showing that the clone is visible
+	bIsCloneVisible = true;
 	// Default rotation index
 	RotAxisIndex = 0;
 
@@ -41,10 +44,14 @@ ARWebCharacter::ARWebCharacter()
 	CharacterCamera->bUsePawnControlRotation = true;
 	
 	// Highlight materials
-	HCGreenMat = ConstructorHelpers::FObjectFinderOptional<UMaterialInstanceConstant>(
+	GreenMat = ConstructorHelpers::FObjectFinderOptional<UMaterialInstanceConstant>(
 		TEXT("MaterialInstanceConstant'/Game/Highlights/M_HighlightClone_Green_Inst.M_HighlightClone_Green_Inst'")).Get();
-	HCRedMat = ConstructorHelpers::FObjectFinderOptional<UMaterialInstanceConstant>(
+	RedMat = ConstructorHelpers::FObjectFinderOptional<UMaterialInstanceConstant>(
 		TEXT("MaterialInstanceConstant'/Game/Highlights/M_HighlightClone_Red_Inst.M_HighlightClone_Red_Inst'")).Get();
+	
+	// Initialize the trace parameters, used for ignoring the cloned objets
+	//TraceParams = FCollisionQueryParams();
+	TraceParams.TraceTag = FName("UserTrace");
 }
 
 // Called when the game starts or when spawned
@@ -56,13 +63,15 @@ void ARWebCharacter::BeginPlay()
 	StandingHeight = GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
 
 	// Check if materials are present
-	if (!HCGreenMat || !HCRedMat)
+	if (!GreenMat || !RedMat)
 	{
 		UE_LOG(RobCoG, Error, TEXT(" !! ARWebCharacter: No highlight materials found!"));
 	}
 	
 	// Init items that can interact with the character
 	ARWebCharacter::InitInteractiveItems();
+
+	GetWorld()->DebugDrawTraceTag = FName("UserTrace");
 }
 
 // Called every frame
@@ -70,8 +79,36 @@ void ARWebCharacter::Tick( float DeltaTime )
 {
 	Super::Tick( DeltaTime );
 
-	// Highlight interactive objects from the trace
-	ARWebCharacter::TraceAndHighlight();
+	// Vectors to trace between 
+	const FVector Start = CharacterCamera->GetComponentLocation();
+	const FVector End = Start + CharacterCamera->GetForwardVector() * MaxGraspLength;
+
+	// Calculate pointing line trace, ignore cloned object (TraceParam)
+	GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECollisionChannel::ECC_PhysicsBody, TraceParams);
+
+	// Check if selected hand is occupied
+	if (HandToRootItem.Contains(SelectedHand))
+	{
+		if (HitResult.IsValidBlockingHit())
+		{
+			// Check release possilibity of the objects in hand
+			ARWebCharacter::CheckReleaseArea();
+		}
+		else if(bIsCloneVisible)
+		{
+			// Hit is not valid, hide the cloned objects
+			ARWebCharacter::ShowClonedObjects(false);
+		}
+	}	
+	else if (InteractiveActors.Contains(HitResult.GetActor()))
+	{
+		// Hand is free, hit actor is interactive -> highlight actor(s)
+		ARWebCharacter::HighlightInteraction();
+	}
+	else if (HighlightedRoot)
+	{
+		ARWebCharacter::RemoveHighlights();
+	}
 }
 
 // Called to bind functionality to input
@@ -138,9 +175,9 @@ void ARWebCharacter::InitInteractiveItems()
 						{
 							InteractiveActors.Add(*ActItr, EItemInteraction::Pickable);
 						}
-						else if (Val.Equals("PickableWithTwoHands"))
+						else if (Val.Equals("TwoHandsPickable"))
 						{
-							InteractiveActors.Add(*ActItr, EItemInteraction::PickableWithTwoHands);
+							InteractiveActors.Add(*ActItr, EItemInteraction::TwoHandsPickable);
 						}
 						else
 						{
@@ -151,11 +188,15 @@ void ARWebCharacter::InitInteractiveItems()
 					{
 						if (Val.Equals("SameType"))
 						{
-
+							StackableActors.Add(*ActItr, EItemStackable::SameType);
 						}
 						else if (Val.Equals("Mixed"))
 						{
-
+							StackableActors.Add(*ActItr, EItemStackable::Mixed);
+						}
+						else if (Val.Equals("Tray"))
+						{
+							StackableActors.Add(*ActItr, EItemStackable::Tray);
 						}
 						else
 						{
@@ -258,22 +299,71 @@ void ARWebCharacter::SmoothStandUp()
 	}
 }
 
-// Handles mouse click
-void ARWebCharacter::OnSelect()
+// Switch rotation axis of the selected actor
+void ARWebCharacter::SwitchRotAxis()
 {
-	if (HandToItem.Contains(SelectedHand))
+	// Stack can only be rotated on first axis
+	if (CloneStack.Num() > 0)
 	{
-		// If selected hand is in use
-		ARWebCharacter::ReleaseActor();
+		RotAxisIndex = 0;
+		return;
 	}
-	else if (HighlightedActor)
+	//Increment the index which coresponds to rotation axis
+	RotAxisIndex++;
+	if (RotAxisIndex > 2)
 	{
-		// If selected hand is free, and an actor is highlighted
-		ARWebCharacter::InteractWithActor();
+		RotAxisIndex = 0;
 	}
-	else
+	UE_LOG(RobCoG, Warning, TEXT(" ** Rot Index: %i"), RotAxisIndex);
+}
+
+// Rotate selected actor into positive direction
+void ARWebCharacter::RotatePos()
+{
+	if (CloneRoot)
 	{
-		UE_LOG(RobCoG, Warning, TEXT(" ** ARWebCharacter: Invalid action!"));
+		switch (RotAxisIndex)
+		{
+		case 0: 		
+			//RootClone->AddActorLocalRotation(FRotator(0.f, 10.f, 0.f)); // Yaw
+			CloneRoot->AddActorWorldRotation(FRotator(0.f, 10.f, 0.f)); // Yaw
+			break;
+		case 1: 
+			//RootClone->AddActorLocalRotation(FRotator(10.f, 0.f, 0.f)); // Pitch
+			CloneRoot->AddActorWorldRotation(FRotator(10.f, 0.f, 0.f)); // Pitch
+			break;
+		case 2: 
+			//RootClone->AddActorLocalRotation(FRotator(0.f, 0.f, 10.f)); // Roll
+			CloneRoot->AddActorWorldRotation(FRotator(0.f, 0.f, 10.f)); // Roll
+			break;
+		default:
+			return;
+		}
+	}
+}
+
+// Rotate selected actor into negative direction
+void ARWebCharacter::RotateNeg()
+{
+	if (CloneRoot)
+	{
+		switch (RotAxisIndex)
+		{
+		case 0:
+			//RootClone->AddActorLocalRotation(FRotator(0.f, -10.f, 0.f)); // Yaw
+			CloneRoot->AddActorWorldRotation(FRotator(0.f, -10.f, 0.f)); // Yaw
+			break;
+		case 1:
+			//RootClone->AddActorLocalRotation(FRotator(-10.f, 0.f, 0.f)); // Pitch
+			CloneRoot->AddActorWorldRotation(FRotator(-10.f, 0.f, 0.f)); // Pitch
+			break;
+		case 2:
+			//RootClone->AddActorLocalRotation(FRotator(0.f, 0.f, -10.f)); // Roll
+			CloneRoot->AddActorWorldRotation(FRotator(0.f, 0.f, -10.f)); // Roll
+			break;
+		default:
+			return;
+		}
 	}
 }
 
@@ -289,7 +379,8 @@ void ARWebCharacter::SwitchHands()
 	else if (SelectedHand == ESelectedHand::Left)
 	{
 		// If both hands are free, switch to both
-		if (!HandToItem.Contains(ESelectedHand::Left) && !HandToItem.Contains(ESelectedHand::Right))
+		if (!HandToRootItem.Contains(ESelectedHand::Left) 
+			&& !HandToRootItem.Contains(ESelectedHand::Right))
 		{
 			SelectedHand = ESelectedHand::Both;
 			UE_LOG(RobCoG, Warning, TEXT(" ** Selected hand: BOTH"));
@@ -302,7 +393,7 @@ void ARWebCharacter::SwitchHands()
 	}
 	else if (SelectedHand == ESelectedHand::Both)
 	{
-		if (!HandToItem.Contains(ESelectedHand::Both))
+		if (!HandToRootItem.Contains(ESelectedHand::Both))
 		{
 			// If both hands are empty, switch to right
 			SelectedHand = ESelectedHand::Right;
@@ -314,395 +405,521 @@ void ARWebCharacter::SwitchHands()
 		}
 	}
 
-	// Remove old clone
-	ARWebCharacter::RemoveHighlightClone();
-
-	// Create new highlight clone if the currently selected hand is occupied 
-	if (HandToItem.Contains(SelectedHand))
-	{
-		// Set new clone
-		ARWebCharacter::SetHighlightClone(HandToItem[SelectedHand]);	
-		
-		// Remove interaction highlight is there is one currently
-		if (HighlightedActor)
-		{
-			HighlightedActor->GetStaticMeshComponent()->SetRenderCustomDepth(false);
-			HighlightedActor = nullptr;
-		}
-	}
-}
-
-// Switch rotation axis of the selected actor
-void ARWebCharacter::SwitchRotAxis()
-{
-	//Increment the index which coresponds to rotation axis
-	RotAxisIndex++;
-	if (RotAxisIndex > 2)
-	{
-		RotAxisIndex = 0;
-	}
-	UE_LOG(RobCoG, Warning, TEXT(" ** Rot Index: %i"), RotAxisIndex);
-}
-
-// Rotate selected actor into positive direction
-void ARWebCharacter::RotatePos()
-{
-	if (HighlightClone)
-	{
-		switch (RotAxisIndex)
-		{
-		case 0: 		
-			//HighlightClone->AddActorLocalRotation(FRotator(0.f, 10.f, 0.f)); // Yaw
-			HighlightClone->AddActorWorldRotation(FRotator(0.f, 10.f, 0.f)); // Yaw
-			break;
-		case 1: 
-			//HighlightClone->AddActorLocalRotation(FRotator(10.f, 0.f, 0.f)); // Pitch
-			HighlightClone->AddActorWorldRotation(FRotator(10.f, 0.f, 0.f)); // Pitch
-			break;
-		case 2: 
-			//HighlightClone->AddActorLocalRotation(FRotator(0.f, 0.f, 10.f)); // Roll
-			HighlightClone->AddActorWorldRotation(FRotator(0.f, 0.f, 10.f)); // Roll
-			break;
-		default:
-			return;
-		}
-		// Calculate new release plane offset
-		ARWebCharacter::CalculatePlaneOffset();
-	}
-}
-
-// Rotate selected actor into negative direction
-void ARWebCharacter::RotateNeg()
-{
-	if (HighlightClone)
-	{
-		switch (RotAxisIndex)
-		{
-		case 0:
-			//HighlightClone->AddActorLocalRotation(FRotator(0.f, -10.f, 0.f)); // Yaw
-			HighlightClone->AddActorWorldRotation(FRotator(0.f, -10.f, 0.f)); // Yaw
-			break;
-		case 1:
-			//HighlightClone->AddActorLocalRotation(FRotator(-10.f, 0.f, 0.f)); // Pitch
-			HighlightClone->AddActorWorldRotation(FRotator(-10.f, 0.f, 0.f)); // Pitch
-			break;
-		case 2:
-			//HighlightClone->AddActorLocalRotation(FRotator(0.f, 0.f, -10.f)); // Roll
-			HighlightClone->AddActorWorldRotation(FRotator(0.f, 0.f, -10.f)); // Roll
-			break;
-		default:
-			return;
-		}
-		// Calculate new release plane offset
-		ARWebCharacter::CalculatePlaneOffset();
-	}
-}
-
-// Interact with the highlighted item
-bool ARWebCharacter::InteractWithActor()
-{
-	if (InteractiveActors.Contains(HighlightedActor))
-	{
-		// Get item interaction type
-		EItemInteraction InteractionType = InteractiveActors[HighlightedActor];
-		
-		if (InteractionType == EItemInteraction::Pickable)
-		{
-			ARWebCharacter::CollectActor();
-		}
-		else if (InteractionType == EItemInteraction::Openable)
-		{
-			ARWebCharacter::ManipulateActor();			
-		}
-	}
-	return true;
-}
-
-// Collect the highlighted item
-void ARWebCharacter::CollectActor()
-{
-	// Add item to map (hand occupied)
-	HandToItem.Add(SelectedHand, HighlightedActor);
+	// Hand switched, clear previous highlights and clones
+	ARWebCharacter::RemoveHighlights();
+	ARWebCharacter::RemoveClones();
 	
-	// Disable physics, collisions and attach item to the character
-	HighlightedActor->GetStaticMeshComponent()->SetSimulatePhysics(false);
-	HighlightedActor->GetStaticMeshComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	HighlightedActor->AttachToActor(this, FAttachmentTransformRules::KeepRelativeTransform);
-	
-	// Set the relative  position of the attached item
-	if (SelectedHand == ESelectedHand::Right)
+	// If the hand switched, and the current hand is occupied -> create clone
+	if (HandToRootItem.Contains(SelectedHand))
 	{
-		HighlightedActor->SetActorRelativeLocation(RIGHT_HAND);
+		// Switch to the other hand clone
+		ARWebCharacter::CreateClones(HandToRootItem[SelectedHand]);
 	}
-	else if (SelectedHand == ESelectedHand::Left)
-	{
-		HighlightedActor->SetActorRelativeLocation(LEFT_HAND);
-	}
-	else if (SelectedHand == ESelectedHand::Both)
-	{
-		HighlightedActor->SetActorRelativeLocation(BOTH_HANDS);
-	}
-
-	// Set the cloned actor
-	ARWebCharacter::SetHighlightClone(HighlightedActor);
-
-	// Remove highlight
-	HighlightedActor->GetStaticMeshComponent()->SetRenderCustomDepth(false);		
-	HighlightedActor = nullptr;
 }
 
-// Release the highlighted item
+// Handles mouse click
+void ARWebCharacter::OnSelect()
+{
+	if (HandToRootItem.Contains(SelectedHand))
+	{
+		// If selected hand is in use
+		ARWebCharacter::ReleaseActor();
+	}
+	else if (HighlightedRoot)
+	{
+		// If selected hand is free, and an actor is highlighted
+		if (InteractiveActors.Contains(HighlightedRoot))
+		{
+			// Get item interaction type
+			EItemInteraction InteractionType = InteractiveActors[HighlightedRoot];
+
+			if (InteractionType == EItemInteraction::Pickable)
+			{
+				ARWebCharacter::CollectActor();
+			}
+			else if (InteractionType == EItemInteraction::Openable)
+			{
+				ARWebCharacter::ManipulateActor();
+			}
+		}
+	}
+	else
+	{
+		UE_LOG(RobCoG, Warning, TEXT(" ** ARWebCharacter: Invalid action!"));
+	}
+}
+
+// Release the collected items
 void ARWebCharacter::ReleaseActor()
 {
 	// Release if the highlighted clone is green
 	if (HitResult.IsValidBlockingHit() && bIsGreen)
 	{
 		// Currently selected actor
-		AStaticMeshActor* CurrSelectedActor = HandToItem[SelectedHand];
+		AStaticMeshActor* CurrRootActor = HandToRootItem[SelectedHand];
 
 		// Remove object from hand
-		HandToItem.Remove(SelectedHand);
+		HandToRootItem.Remove(SelectedHand);
 
 		// Detach component, fix collision and physics
-		CurrSelectedActor->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
-		CurrSelectedActor->GetStaticMeshComponent()->SetSimulatePhysics(true);
-		CurrSelectedActor->GetStaticMeshComponent()->bGenerateOverlapEvents = true;
-		//CurrSelectedActor->GetStaticMeshComponent()->SetNotifyRigidBodyCollision(true);
-		CurrSelectedActor->GetStaticMeshComponent()->SetCollisionProfileName("PhysicsActor");
+		CurrRootActor->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+		CurrRootActor->GetStaticMeshComponent()->SetSimulatePhysics(true);
+		CurrRootActor->GetStaticMeshComponent()->bGenerateOverlapEvents = true;
+		CurrRootActor->GetStaticMeshComponent()->SetCollisionProfileName("PhysicsActor");
 
 		// Set actor location
-		CurrSelectedActor->SetActorLocationAndRotation(
-			HighlightClone->GetActorLocation(), HighlightClone->GetActorQuat());
+		CurrRootActor->SetActorLocationAndRotation(
+			CloneRoot->GetActorLocation(), CloneRoot->GetActorQuat());
 
-		// Remove highlight clone
-		ARWebCharacter::RemoveHighlightClone();
+		// Detach stack if available
+		if (AttachedStack.Num() > 0)
+		{
+			for (const auto AttachStackItr : AttachedStack)
+			{
+				AttachStackItr->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+				AttachStackItr->GetStaticMeshComponent()->SetSimulatePhysics(true);
+				AttachStackItr->GetStaticMeshComponent()->bGenerateOverlapEvents = true;
+				AttachStackItr->GetStaticMeshComponent()->SetCollisionProfileName("PhysicsActor");
+			}
+			// Clear stack
+			AttachedStack.Empty();
+		}
+		// Remove clone(s)
+		ARWebCharacter::RemoveClones();
 	}
 	else
 	{
-		UE_LOG(RobCoG, Warning, TEXT(" ** ARWebCharacter: Cannot put %s down."), *HandToItem[SelectedHand]->GetName());
+		UE_LOG(RobCoG, Warning, TEXT(" ** ARWebCharacter: Cannot put %s down."), *HandToRootItem[SelectedHand]->GetName());
 	}
+}
+
+// Collect the highlighted item
+void ARWebCharacter::CollectActor()
+{	
+	// Root object location
+	const FVector RootLoc = HighlightedRoot->GetActorLocation();
+
+	// Disable physics, collisions and attach item to the character
+	HighlightedRoot->GetStaticMeshComponent()->SetSimulatePhysics(false);
+	HighlightedRoot->GetStaticMeshComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	HighlightedRoot->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
+	// TODO make Tray initial rotation to fit
+	//HighlightedRoot->SetActorRelativeRotation(FRotator::ZeroRotator);
+
+	// Set the relative  position of the attached item
+	if (SelectedHand == ESelectedHand::Right)
+	{
+		HighlightedRoot->SetActorRelativeLocation(RIGHT_HAND);
+	}
+	else if (SelectedHand == ESelectedHand::Left)
+	{
+		HighlightedRoot->SetActorRelativeLocation(LEFT_HAND);
+	}
+	else if (SelectedHand == ESelectedHand::Both)
+	{
+		HighlightedRoot->SetActorRelativeLocation(BOTH_HANDS);
+		// Check and attach stack type
+		if (HighlightedStack.Num() > 0)
+		{
+			float StackHeight = 0.0f;
+			for (const auto HighlightStackItr : HighlightedStack)
+			{	
+				// Get bounding box before disabling simulation
+				StackHeight += HighlightStackItr->GetComponentsBoundingBox().GetExtent().Z;
+				// Disable physics, collisions and attach item to the root actor
+				HighlightStackItr->GetStaticMeshComponent()->SetSimulatePhysics(false);
+				HighlightStackItr->GetStaticMeshComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+				HighlightStackItr->AttachToActor(HighlightedRoot, FAttachmentTransformRules::KeepWorldTransform);
+				// Set stack height
+				HighlightStackItr->SetActorRelativeLocation(FVector(0.f, 0.f, StackHeight));
+			}
+			// Save stack, since the highlight will be removed
+			AttachedStack = HighlightedStack;
+		}
+		else if (HighlightedTrayStack.Num() > 0)
+		{
+			for (const auto HighlightTrayStackItr : HighlightedTrayStack)
+			{
+				const FVector RelativeLoc = HighlightTrayStackItr->GetActorLocation() - RootLoc;
+				// Disable physics, collisions and attach item to the root actor
+				HighlightTrayStackItr->GetStaticMeshComponent()->SetSimulatePhysics(false);
+				HighlightTrayStackItr->GetStaticMeshComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+				HighlightTrayStackItr->AttachToActor(HighlightedRoot, FAttachmentTransformRules::KeepWorldTransform);
+				// Set relative location
+				HighlightTrayStackItr->SetActorRelativeLocation(RelativeLoc);
+			}
+			// Save stack, since the highlight will be removed
+			AttachedStack = HighlightedTrayStack;
+		}
+	}
+
+	// Add item to map (hand occupied)
+	HandToRootItem.Add(SelectedHand, HighlightedRoot);
+	// Create clones of the collected objects
+	ARWebCharacter::CreateClones(HighlightedRoot);
+	// Remove previous highlights
+	ARWebCharacter::RemoveHighlights();
 }
 
 // Open/close the highlighted item
 void ARWebCharacter::ManipulateActor()
 {
-	if (InteractiveActorsToOpenedState.Contains(HighlightedActor))
+	if (InteractiveActorsToOpenedState.Contains(HighlightedRoot))
 	{
-		if (InteractiveActorsToOpenedState[HighlightedActor])
+		if (InteractiveActorsToOpenedState[HighlightedRoot])
 		{
 			// Close furniture
-			HighlightedActor->GetStaticMeshComponent()->AddImpulse(-IMPULSE * HighlightedActor->GetActorForwardVector());
+			HighlightedRoot->GetStaticMeshComponent()->AddImpulse(-IMPULSE * HighlightedRoot->GetActorForwardVector());
 			// Set state to closed
-			InteractiveActorsToOpenedState[HighlightedActor] = false;
+			InteractiveActorsToOpenedState[HighlightedRoot] = false;
 		}
 		else
 		{
 			// Open furniture
-			HighlightedActor->GetStaticMeshComponent()->AddImpulse(IMPULSE * HighlightedActor->GetActorForwardVector());
+			HighlightedRoot->GetStaticMeshComponent()->AddImpulse(IMPULSE * HighlightedRoot->GetActorForwardVector());
 			// Set state to closed
-			InteractiveActorsToOpenedState[HighlightedActor] = true;
+			InteractiveActorsToOpenedState[HighlightedRoot] = true;
 		}
 	}
-}
-
-// Set the cloned actor
-void ARWebCharacter::SetHighlightClone(AStaticMeshActor* ActorToClone)
-{
-	// Remove old clone
-	ARWebCharacter::RemoveHighlightClone();
-	
-	// Spawn parameters for the cloned actor
-	FActorSpawnParameters SpawnParam;
-	SpawnParam.Name = FName("HighlightClone");
-	SpawnParam.Template = ActorToClone;
-	SpawnParam.Owner = ActorToClone->GetOwner();
-	SpawnParam.Instigator = ActorToClone->GetInstigator();
-	SpawnParam.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-
-	// Create the clone from the actor
-	HighlightClone = GetWorld()->SpawnActorAbsolute<AStaticMeshActor>(
-		ActorToClone->GetClass(), ActorToClone->GetTransform(), SpawnParam);
-	
-	// Set default highlight material to red
-	bIsGreen = false;
-	HighlightClone->GetStaticMeshComponent()->SetMaterial(0, HCRedMat);
-
-	// Plane collision offset
-	ARWebCharacter::CalculatePlaneOffset();
-
-	// Set physics, collisions properties
-	HighlightClone->GetStaticMeshComponent()->SetSimulatePhysics(false);
-	HighlightClone->GetStaticMeshComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-
-	// Set cloned actor to invisible
-	HighlightClone->SetActorHiddenInGame(true);
-}
-
-// Remove clone
-FORCEINLINE void ARWebCharacter::RemoveHighlightClone()
-{
-	if (HighlightClone)
-	{
-		HighlightClone->SetActorHiddenInGame(true);
-		HighlightClone->SetActorEnableCollision(false);
-		//HighlightClone->Destroy();
-		RotAxisIndex = 0;
-	}
-}
-
-// Trace and highlight manipulation
-FORCEINLINE void ARWebCharacter::TraceAndHighlight()
-{
-	// Vectors to trace between 
-	const FVector Start = CharacterCamera->GetComponentLocation();
-	const FVector End = Start + CharacterCamera->GetForwardVector() * MaxGraspLength;
-	// Line trace
-	GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECC_Pawn);
-
-	if (HandToItem.Contains(SelectedHand))
-	{
-		// If hand is occupied highlight release area
-		ARWebCharacter::HighlightRelease();
-	}	
-	else if (HitResult.IsValidBlockingHit() && HitResult.GetActor()->IsA(AStaticMeshActor::StaticClass()))
-	{
-		// If hand is free, and the hit actor is of type static mesh actor	
-		ARWebCharacter::HighlightInteraction();
-	}
-	else if (HighlightedActor)
-	{
-		// If actor is highlighted, but the current one is not a static mesh actor
-		HighlightedActor->GetStaticMeshComponent()->SetRenderCustomDepth(false);
-		HighlightedActor = nullptr;
-	}
-}
-
-// Highlight release area
-FORCEINLINE void ARWebCharacter::HighlightRelease()
-{
-	if (HitResult.IsValidBlockingHit())
-	{
-		// Set HC actor location
-		HighlightClone->SetActorLocation(HitResult.ImpactPoint + HCReleaseOffset);
-		// Set to visible
-		HighlightClone->SetActorHiddenInGame(false);
-
-		if (HitResult.ImpactNormal.Z > 0.9 && !IsCollidingAtRelease())
-		{	
-			// Draw HC with green, if plane is horizontal and no collisions are present
-			if (!bIsGreen)
-			{
-				HighlightClone->GetStaticMeshComponent()->SetMaterial(0, HCGreenMat);
-				bIsGreen = true;
-			}
-		}
-		else
-		{
-			// Draw cloned actor with red
-			if (bIsGreen)
-			{
-				HighlightClone->GetStaticMeshComponent()->SetMaterial(0, HCRedMat);
-				bIsGreen = false;
-			}
-		}
-	}
-	else
-	{		
-		HighlightClone->SetActorHiddenInGame(true);
-	}
-	return;
-}
-
-// Calculate plane offset
-FORCEINLINE void ARWebCharacter::CalculatePlaneOffset()
-{
-	HCReleaseOffset = FVector(0.f, 0.f, HighlightClone->GetComponentsBoundingBox(true).GetExtent().Z + 0.5f);
-}
-
-// Check if object is colliding at release
-FORCEINLINE bool ARWebCharacter::IsCollidingAtRelease()
-{
-	FHitResult OutHit;
-	const FVector Loc = HighlightClone->GetActorLocation();
-	// Sweep current location plus a small offset (apparently Start and End loc need to differ)
-	const bool Hit = GetWorld()->SweepSingleByChannel(OutHit, Loc, Loc + FVector(0.f, 0.f, 0.1f),
-		HighlightClone->GetActorQuat(),	ECollisionChannel::ECC_Pawn,
-		HighlightClone->GetStaticMeshComponent()->GetCollisionShape(-2.5f));
-
-	//if (Hit)
-	//{
-	//	DrawDebugPoint(GetWorld(), OutHit.ImpactPoint, 10.f, FColor::Blue, false, 0.5);
-
-	//	if (HighlightClone->GetStaticMeshComponent()->GetCollisionShape().IsBox())
-	//	{
-	//		UE_LOG(RobCoG, Warning, TEXT("BOX Collision: %s"), *OutHit.GetActor()->GetName());
-
-	//		DrawDebugBox(GetWorld(), OutHit.ImpactPoint, 
-	//			HighlightClone->GetStaticMeshComponent()->GetCollisionShape(-2.5f).GetExtent(),
-	//			FColor::Blue, false, 0.5f);
-
-	//	}
-	//	else if (HighlightClone->GetStaticMeshComponent()->GetCollisionShape().IsCapsule())
-	//	{
-	//		UE_LOG(RobCoG, Warning, TEXT("CAPSULE Collision: %s"), *OutHit.GetActor()->GetName());
-	//		
-	//		DrawDebugCapsule(GetWorld(), OutHit.ImpactPoint,
-	//			HighlightClone->GetStaticMeshComponent()->GetCollisionShape().GetCapsuleHalfHeight(),
-	//			HighlightClone->GetStaticMeshComponent()->GetCollisionShape().GetCapsuleRadius(),
-	//			HighlightClone->GetStaticMeshComponent()->GetComponentQuat(),
-	//			FColor::Blue, false, 0.5f);
-
-	//	}
-	//	else if (HighlightClone->GetStaticMeshComponent()->GetCollisionShape().IsSphere())
-	//	{
-	//		UE_LOG(RobCoG, Warning, TEXT("SPHERE Collision: %s"), *OutHit.GetActor()->GetName());
-	//	}
-	//	else
-	//	{
-	//		UE_LOG(RobCoG, Warning, TEXT("OTHER Collision: %s"), *OutHit.GetActor()->GetName());
-	//	}
-	//}
-	//else
-	//{
-	//	UE_LOG(RobCoG, Warning, TEXT("NO Collision!"));
-	//}
-	
-	return Hit;
 }
 
 // Highlight interaction
 FORCEINLINE void ARWebCharacter::HighlightInteraction()
 {
-	// Cast actor to a static mesh
-	AStaticMeshActor* HitActor = Cast<AStaticMeshActor>(HitResult.GetActor());
-	// Check if it is an interactive actor
-	if (InteractiveActors.Contains(HitActor))
-	{
-		if (!HighlightedActor)
-		{
-			// If no highlighted actor exist, highlight this one
-			HighlightedActor = HitActor;
-			HighlightedActor->GetStaticMeshComponent()->SetRenderCustomDepth(true);
+	// Cast hit actor to a static mesh
+	AStaticMeshActor* NewHitActor = Cast<AStaticMeshActor>(HitResult.GetActor());
 
-		}
-		else if (HighlightedActor == HitActor)
-		{
-			// Return if the highlighted actor is the same with the previous one
-			return;
-		}
-		else
-		{
-			// Switch the highlights, turn off previous, highlight current one
-			HighlightedActor->GetStaticMeshComponent()->SetRenderCustomDepth(false);
-			HighlightedActor = HitActor;
-			HighlightedActor->GetStaticMeshComponent()->SetRenderCustomDepth(true);
-		}
-	}
-	else if (HighlightedActor)
+	// Return if the highlighted actor was set and did not change
+	if (HighlightedRoot && HighlightedRoot == NewHitActor)
 	{
-		// If actor is highlighted, but the current one is not an interactive one
-		HighlightedActor->GetStaticMeshComponent()->SetRenderCustomDepth(false);
-		HighlightedActor = nullptr;
+		return;
+	}
+
+	if (!HighlightedRoot)
+	{
+		// If no prev highlighted actor exist, highlight this one
+		ARWebCharacter::SetHighlights(NewHitActor);
+	}
+	else
+	{
+		// Replace old highlights
+		ARWebCharacter::RemoveHighlights();
+		ARWebCharacter::SetHighlights(NewHitActor);
 	}
 }
 
+// Highlight release area
+FORCEINLINE void ARWebCharacter::CheckReleaseArea()
+{
+	// Set root clone location
+	CloneRoot->SetActorLocation(HitResult.ImpactPoint + 
+		(HitResult.Normal * CloneRoot->GetComponentsBoundingBox(true).GetExtent()));
+	
+	// Check if root clone is in collision
+	if (!ARWebCharacter::RootCloneIsColliding())
+	{
+		// Draw the cloned objects with green
+		if (!bIsGreen)
+		{
+			ARWebCharacter::ColorClonedObjects(GreenMat);
+			bIsGreen = true;
+		}
+	}
+	else
+	{
+		// Draw the cloned objects with red
+		if (bIsGreen)
+		{
+			ARWebCharacter::ColorClonedObjects(RedMat);
+			bIsGreen = false;
+		}
+	}
+
+	// If clone(s) is not visible, set it to visible
+	if (!bIsCloneVisible)
+	{
+		ARWebCharacter::ShowClonedObjects(true);
+	}
+}
+
+// Check if object is colliding at release
+FORCEINLINE bool ARWebCharacter::RootCloneIsColliding()
+{
+	//TODO  GetWorld()->ComponentOverlapMulti()
+	FHitResult OutHitRes;
+	CloneRoot->AddActorWorldOffset(FVector(0.f, 0.f, -1.f), true, &OutHitRes);
+
+	if (OutHitRes.IsValidBlockingHit())
+	{
+		//UE_LOG(RobCoG, Warning, TEXT(" RootCollision with: %s"), *OutHitRes.GetActor()->GetName());
+		return true;
+	}
+	else
+	{
+		return false;
+	}
+}
+
+// Set highlighted selection
+FORCEINLINE void ARWebCharacter::SetHighlights(AStaticMeshActor* RootActor)
+{
+	RootActor->GetStaticMeshComponent()->SetRenderCustomDepth(true);
+	// If both hands are selected and the root actor is stackable
+	if (SelectedHand == ESelectedHand::Both
+		&& StackableActors.Contains(RootActor))
+	{
+		// Highlighted actor is stackable
+		ARWebCharacter::CreateHighlightStack(RootActor);
+	}
+	HighlightedRoot = RootActor;
+}
+
+// Check for stacking higlight
+FORCEINLINE void ARWebCharacter::CreateHighlightStack(AStaticMeshActor* RootActor)
+{
+	// Get root actor location
+	const FVector ActorLoc = RootActor->GetActorLocation();
+
+	
+
+	// Check stackable type
+	if (StackableActors[RootActor] == EItemStackable::Tray)
+	{
+		TArray<FHitResult> TrayHitResults;
+		
+		FComponentQueryParams CompCollParams(TEXT("TrayTrace"), RootActor);
+		CompCollParams.TraceTag = FName("TrayTrace");
+		//FCollisionResponseParams ResponseParam;
+		//RootActor->GetRootPrimitiveComponent()->InitSweepCollisionParams(CompCollParams, ResponseParam);
+		GetWorld()->DebugDrawTraceTag = FName("TrayTrace");
+		UE_LOG(RobCoG, Warning, TEXT(" ** Tray swipe:"));
+
+		// Check object on tray
+		if (GetWorld()->ComponentSweepMulti(
+			TrayHitResults,
+			RootActor->GetRootPrimitiveComponent(),
+			ActorLoc + FVector(0.f, 0.f, 2.f),
+			ActorLoc + FVector(0.f, 0.f, MAX_STACK_HEIGHT),
+			RootActor->GetActorQuat(),
+			CompCollParams))
+		{
+			for (const auto TrayHitItr : TrayHitResults)
+			{
+				UE_LOG(RobCoG, Warning, TEXT("\t %s"), *TrayHitItr.GetActor()->GetName());
+				if (InteractiveActors.Contains(TrayHitItr.GetActor()))
+				{
+					// If actor is interactive cast to static mesh actor and add it to the stack
+					AStaticMeshActor* CurrStackActor = Cast<AStaticMeshActor>(TrayHitItr.GetActor());
+					if (CurrStackActor)
+					{
+						// Set highlight to true;
+						CurrStackActor->GetStaticMeshComponent()->SetRenderCustomDepth(true);
+						HighlightedTrayStack.AddUnique(CurrStackActor);
+
+						
+					}
+				}
+			}
+		}
+	}
+	else
+	{
+		FCollisionQueryParams CollisionParams;
+		CollisionParams.TraceTag = FName("StackTrace");
+
+		TArray<FHitResult> StackHitResults;
+		// Check objects above
+		GetWorld()->LineTraceMultiByObjectType(StackHitResults,
+			ActorLoc, ActorLoc + FVector(0.f, 0.f, MAX_STACK_HEIGHT), FCollisionObjectQueryParams::AllDynamicObjects,
+			CollisionParams);
+
+		GetWorld()->DebugDrawTraceTag = FName("StackTrace");
+
+		UE_LOG(RobCoG, Warning, TEXT("Stack:"));
+		// Iterate hit results
+		for (const auto StackItr : StackHitResults)
+		{
+			if (StackableActors.Contains(StackItr.GetActor()))
+			{
+				// If actor is stackable cast to static mesh actor and add it to the stack
+				AStaticMeshActor* CurrStackActor = Cast<AStaticMeshActor>(StackItr.GetActor());
+				if (CurrStackActor)
+				{
+					CurrStackActor->GetStaticMeshComponent()->SetRenderCustomDepth(true);
+					HighlightedStack.AddUnique(CurrStackActor);
+				}
+			}
+		}
+	}
+}
+
+// Check for stacking higlight
+FORCEINLINE void ARWebCharacter::RemoveHighlights()
+{	
+	if (HighlightedRoot)
+	{
+		HighlightedRoot->GetStaticMeshComponent()->SetRenderCustomDepth(false);
+		HighlightedRoot = nullptr;
+	}
+
+	if (HighlightedStack.Num() > 0)
+	{
+		for (const auto HighlightStackItr : HighlightedStack)
+		{
+			HighlightStackItr->GetStaticMeshComponent()->SetRenderCustomDepth(false);
+		}
+		HighlightedStack.Empty();
+	}
+
+	if (HighlightedTrayStack.Num() > 0)
+	{
+		for (const auto HighlightTrayStackItr : HighlightedTrayStack)
+		{
+			HighlightTrayStackItr->GetStaticMeshComponent()->SetRenderCustomDepth(false);
+		}
+		HighlightedTrayStack.Empty();
+	}
+}
+
+// Create the cloned actor
+void ARWebCharacter::CreateClones(AStaticMeshActor* RootActorToClone)
+{
+	// Remove old clone(s)
+	ARWebCharacter::RemoveClones();
+
+	// Spawn parameters for the cloned actor
+	FActorSpawnParameters SpawnParam;
+	SpawnParam.Template = RootActorToClone;
+	SpawnParam.Owner = RootActorToClone->GetOwner();
+	SpawnParam.Instigator = RootActorToClone->GetInstigator();
+	SpawnParam.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	// Create the clone root from the actor
+	CloneRoot = GetWorld()->SpawnActorAbsolute<AStaticMeshActor>(
+		RootActorToClone->GetClass(), RootActorToClone->GetTransform(), SpawnParam);
+	// Set physics, collisions properties
+	CloneRoot->GetStaticMeshComponent()->SetSimulatePhysics(false);
+	CloneRoot->GetStaticMeshComponent()->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+
+
+	for (const auto AttachedStackItr : AttachedStack)
+	{
+		// Spawn parameters for the cloned stacked actor
+		SpawnParam.Template = AttachedStackItr;
+		SpawnParam.Owner = AttachedStackItr->GetOwner();
+		SpawnParam.Instigator = AttachedStackItr->GetInstigator();
+		// Create the current stack clone from the actor
+		AStaticMeshActor* CurrStackClone = GetWorld()->SpawnActorAbsolute<AStaticMeshActor>(
+			AttachedStackItr->GetClass(), AttachedStackItr->GetTransform(), SpawnParam);
+		// Set physics, collisions properties
+		CurrStackClone->GetStaticMeshComponent()->SetSimulatePhysics(false);
+		CurrStackClone->GetStaticMeshComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		// Attach clone to the root clone
+		CurrStackClone->AttachToActor(CloneRoot, FAttachmentTransformRules::KeepWorldTransform);
+		CurrStackClone->SetActorRelativeTransform(AttachedStackItr->GetRootComponent()->GetRelativeTransform());
+		// Add clone to stack
+		CloneStack.Add(CurrStackClone);
+	}
+
+
+
+
+	//// Create the clone stack
+	//if (HighlightedStack.Num() > 0)
+	//{
+	//	float StackHeight = 0.0f;
+	//	for (const auto HighlightStackItr : HighlightedStack)
+	//	{
+	//		// Spawn parameters for the cloned stacked actor
+	//		SpawnParam.Template = HighlightStackItr;
+	//		SpawnParam.Owner = HighlightStackItr->GetOwner();
+	//		SpawnParam.Instigator = HighlightStackItr->GetInstigator();
+	//		// Create the current stack clone from the actor
+	//		AStaticMeshActor* CurrStackClone = GetWorld()->SpawnActorAbsolute<AStaticMeshActor>(
+	//			HighlightStackItr->GetClass(), HighlightStackItr->GetTransform(), SpawnParam);
+	//		// Set physics, collisions properties
+	//		CurrStackClone->GetStaticMeshComponent()->SetSimulatePhysics(false);
+	//		CurrStackClone->GetStaticMeshComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	//		// Attach clone to the root clone
+	//		CurrStackClone->AttachToActor(CloneRoot, FAttachmentTransformRules::KeepWorldTransform);
+	//		// Update current stack height
+	//		StackHeight += HighlightStackItr->GetComponentsBoundingBox(true).GetExtent().Z;
+	//		CurrStackClone->SetActorRelativeLocation(FVector(0.f, 0.f, StackHeight));
+	//		// Add clone to stack
+	//		CloneStack.Add(CurrStackClone);
+	//	}
+	//}
+	//else if (HighlightedTrayStack.Num() > 0)
+	//{
+	//	for (const auto HighlightTrayStackItr : HighlightedTrayStack)
+	//	{
+	//		// Spawn parameters for the cloned stacked actor
+	//		SpawnParam.Template = HighlightTrayStackItr;
+	//		SpawnParam.Owner = HighlightTrayStackItr->GetOwner();
+	//		SpawnParam.Instigator = HighlightTrayStackItr->GetInstigator();
+	//		// Create the current stack clone from the actor
+	//		AStaticMeshActor* CurrStackClone = GetWorld()->SpawnActorAbsolute<AStaticMeshActor>(
+	//			HighlightTrayStackItr->GetClass(), HighlightTrayStackItr->GetTransform(), SpawnParam);
+	//		// Set physics, collisions properties
+	//		CurrStackClone->GetStaticMeshComponent()->SetSimulatePhysics(false);
+	//		CurrStackClone->GetStaticMeshComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	//		// Attach clone to the root clone
+	//		CurrStackClone->AttachToActor(CloneRoot, FAttachmentTransformRules::KeepWorldTransform);
+	//		CurrStackClone->SetActorRelativeLocation(
+	//			HighlightTrayStackItr->GetActorLocation() - RootActorToClone->GetActorLocation());
+	//		// Add clone to stack
+	//		CloneStack.Add(CurrStackClone);
+	//	}
+	//}
+
+	// Set cloned actor to invisible
+	ShowClonedObjects(false);
+	// Set default color to red
+	ARWebCharacter::ColorClonedObjects(RedMat);
+	bIsGreen = false;
+	// Add clone to the ignored components of the trace
+	TraceParams.ClearIgnoredComponents();
+	TraceParams.AddIgnoredActor(CloneRoot);
+}
+
+// Hide/view cloned objects
+FORCEINLINE void ARWebCharacter::ShowClonedObjects(bool bShow)
+{
+	CloneRoot->SetActorHiddenInGame(!bShow);
+	for (const auto StackItr : CloneStack)
+	{
+		StackItr->SetActorHiddenInGame(!bShow);
+	}
+	bIsCloneVisible = bShow;
+}
+
+// Color the cloned objects
+FORCEINLINE void ARWebCharacter::ColorClonedObjects(UMaterialInstanceConstant* Material)
+{
+	for (uint8 i = 0; i < CloneRoot->GetStaticMeshComponent()->GetMaterials().Num(); ++i)
+	{
+		CloneRoot->GetStaticMeshComponent()->SetMaterial(i, Material);
+	}
+	for (const auto StackItr : CloneStack)
+	{
+		for (uint8 i = 0; i < StackItr->GetStaticMeshComponent()->GetMaterials().Num(); ++i)
+		{
+			StackItr->GetStaticMeshComponent()->SetMaterial(i, Material);
+		}
+	}
+}
+
+// Remove clone
+void ARWebCharacter::RemoveClones()
+{
+	if (CloneRoot)
+	{
+		CloneRoot->Destroy();
+		for (const auto CloneStackItr : CloneStack)
+		{
+			CloneStackItr->Destroy();
+		}
+		CloneStack.Empty();
+	}
+	RotAxisIndex = 0;
+}

@@ -18,12 +18,20 @@ enum class ESelectedHand : uint8
 UENUM()
 enum class EItemInteraction : uint8
 {
-	Pickable				UMETA(DisplayName = "Pickable"),
-	Openable				UMETA(DisplayName = "Openable"),
-	PickableWithTwoHands	UMETA(DisplayName = "PickableWithTwoHands"),
-	OpenableWithTwoHands	UMETA(DisplayName = "OpenableWithTwoHands")
+	Pickable			UMETA(DisplayName = "Pickable"),
+	Openable			UMETA(DisplayName = "Openable"),
+	TwoHandsPickable	UMETA(DisplayName = "TwoHandsPickable"),
+	TwoHandsOpenable	UMETA(DisplayName = "TwoHandsOpenable")
 };
 
+// Enum of the possible actor interaction
+UENUM()
+enum class EItemStackable : uint8
+{
+	SameType		UMETA(DisplayName = "SameType"),
+	Mixed			UMETA(DisplayName = "Mixed"),
+	Tray			UMETA(DisplayName = "Tray")
+};
 
 UCLASS()
 class ROBCOG_API ARWebCharacter : public ACharacter
@@ -36,7 +44,7 @@ public:
 
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
-	
+
 	// Called every frame
 	virtual void Tick( float DeltaSeconds ) override;
 
@@ -46,7 +54,7 @@ public:
 	// Maximum arm length for grasping
 	UPROPERTY(EditAnywhere, Category = "Robcog")
 	float MaxGraspLength;
-	
+
 protected:
 	// Initialize interactive items
 	void InitInteractiveItems();
@@ -66,12 +74,10 @@ protected:
 	// Smooth stand up
 	void SmoothStandUp();
 
-	// Handles item selection
-	void OnSelect();
 
 	// Handles choosing hands
 	void SwitchHands();
-	
+
 	// Switch rotation axis of the selected actor
 	void SwitchRotAxis();
 
@@ -81,41 +87,53 @@ protected:
 	// Rotate selected actor into negative direction
 	void RotateNeg();
 
-	// Interact with the highlighted item
-	bool InteractWithActor();
+	// Handles item selection
+	void OnSelect();
 
 	// Collect the highlighted item
 	void CollectActor();
 
-	// Collect the highlighted item
+	// Release the collected items
 	void ReleaseActor();
 
 	// Open/close the highlighted item
 	void ManipulateActor();
 
-	// Set cloned actor, used for highlighting release positions
-	void SetHighlightClone(AStaticMeshActor* ActorToClone);
-
-	// Set cloned actor, used for highlighting release positions
-	FORCEINLINE void RemoveHighlightClone();
-
-	// Trace and highlight manipulation
-	FORCEINLINE void TraceAndHighlight();
-
-	// Highlight release area
-	FORCEINLINE void HighlightRelease();
-
-	// Calculate the offset from the plane
-	FORCEINLINE void CalculatePlaneOffset();
-
-	// Check release collisions
-	FORCEINLINE bool IsCollidingAtRelease();
-
 	// Highlight interaction
 	FORCEINLINE void HighlightInteraction();
+	
+	// Check for a possible release area of the objects in hand
+	FORCEINLINE void CheckReleaseArea();
+	
+	// Check release collisions
+	FORCEINLINE bool RootCloneIsColliding();
+
+	// Set highlighted selection
+	FORCEINLINE void SetHighlights(AStaticMeshActor* RootActor);
+
+	// Check multiple highlights (stack, tray)
+	FORCEINLINE void CreateHighlightStack(AStaticMeshActor* RootActor);
+
+	// Clear highlighted selection
+	FORCEINLINE void RemoveHighlights();
+
+	// Set cloned actor, used for highlighting release positions
+	void CreateClones(AStaticMeshActor* RootActorToClone);
+
+	// Hide/view the cloned objects
+	FORCEINLINE void ShowClonedObjects(bool bShow);
+
+	// Color the cloned objects
+	FORCEINLINE void ColorClonedObjects(UMaterialInstanceConstant* Material);
+
+	// Set cloned actor, used for highlighting release positions
+	void RemoveClones();
 
 	// Character camera
 	UCameraComponent* CharacterCamera;
+
+	// Collision parameters for the trace call, clone root is added to ignore list
+	FCollisionQueryParams TraceParams;
 
 	// Speed factor, used for slowing/increasing the speed of the caracter
 	float SpeedFactor;
@@ -128,9 +146,12 @@ protected:
 
 	// In crouch position
 	bool bIsCrouched;
-	
+
 	// Set of all interactive actors
-	TMap<AStaticMeshActor*, EItemInteraction> InteractiveActors;
+	TMap<AActor*, EItemInteraction> InteractiveActors;
+
+	// Set of all interactive actors
+	TMap<AActor*, EItemStackable> StackableActors;
 
 	// Openable actors and their opened state
 	TMap<AStaticMeshActor*, bool> InteractiveActorsToOpenedState;
@@ -138,29 +159,41 @@ protected:
 	// Selected hand
 	ESelectedHand SelectedHand;
 
-	// Selected hand to picked actor
-	TMap<ESelectedHand, AStaticMeshActor*> HandToItem;
+	// Selected hand to collected root item
+	TMap<ESelectedHand, AStaticMeshActor*> HandToRootItem;
+
+	// Currently attached stack
+	TArray<AStaticMeshActor*> AttachedStack;
 
 	// Trace hit result
 	FHitResult HitResult;
 
-	// Currently highlighted actor
-	AStaticMeshActor* HighlightedActor;
+	// Currently highlighted root actor
+	AStaticMeshActor* HighlightedRoot;
 
-	// Highlight clone actor, used for highlighting release positions
-	AStaticMeshActor* HighlightClone;
+	// Currently highlighted stack
+	TArray<AStaticMeshActor*> HighlightedStack;
 
-	// Highlight clone release offset
-	FVector HCReleaseOffset;
+	// Currently highlighted tray stack
+	TArray<AStaticMeshActor*> HighlightedTrayStack;
+
+	// Clone of the attached root object (green/red) for release visualization
+	AStaticMeshActor* CloneRoot;
+
+	// Cloned stack (green/red) for release visualization
+	TArray<AStaticMeshActor*> CloneStack;
 
 	// Highlight clone material green
-	UMaterialInstanceConstant* HCGreenMat;
+	UMaterialInstanceConstant* GreenMat;
 
 	// Highlight clone material red
-	UMaterialInstanceConstant* HCRedMat;
+	UMaterialInstanceConstant* RedMat;
 
-	// Flag showing current material (avoids re-setting the same material)
+	// Flag showing current clone material color
 	bool bIsGreen;
+
+	// Flag showing that the clones are visible
+	bool bIsCloneVisible;
 
 	// Rotator axis used for rotating the selected object
 	uint8 RotAxisIndex;
