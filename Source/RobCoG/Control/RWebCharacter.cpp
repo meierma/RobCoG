@@ -495,30 +495,32 @@ void ARWebCharacter::ReleaseActor()
 
 // Collect the highlighted item
 void ARWebCharacter::CollectActor()
-{	
-	// Root object location
-	const FVector RootLoc = HighlightedRoot->GetActorLocation();
-
-	// Disable physics, collisions and attach item to the character
-	HighlightedRoot->GetStaticMeshComponent()->SetSimulatePhysics(false);
-	HighlightedRoot->GetStaticMeshComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	HighlightedRoot->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
-	// TODO make Tray initial rotation to fit
-	//HighlightedRoot->SetActorRelativeRotation(FRotator::ZeroRotator);
-
+{
 	// Set the relative  position of the attached item
 	if (SelectedHand == ESelectedHand::Right)
 	{
+		// Create clones of the collected objects
+		ARWebCharacter::CreateClones(HighlightedRoot);
+		// Disable physics, collisions and attach root item to the character
+		HighlightedRoot->GetStaticMeshComponent()->SetSimulatePhysics(false);
+		HighlightedRoot->GetStaticMeshComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		HighlightedRoot->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
 		HighlightedRoot->SetActorRelativeLocation(RIGHT_HAND);
 	}
 	else if (SelectedHand == ESelectedHand::Left)
 	{
+		// Create clones of the collected objects
+		ARWebCharacter::CreateClones(HighlightedRoot);
+		// Disable physics, collisions and attach root item to the character
+		HighlightedRoot->GetStaticMeshComponent()->SetSimulatePhysics(false);
+		HighlightedRoot->GetStaticMeshComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		HighlightedRoot->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
 		HighlightedRoot->SetActorRelativeLocation(LEFT_HAND);
+
 	}
 	else if (SelectedHand == ESelectedHand::Both)
 	{
-		HighlightedRoot->SetActorRelativeLocation(BOTH_HANDS);
-		// Check and attach stack type
+		// Attache stacked items first to the root item
 		if (HighlightedStack.Num() > 0)
 		{
 			float StackHeight = 0.0f;
@@ -540,24 +542,27 @@ void ARWebCharacter::CollectActor()
 		{
 			for (const auto HighlightTrayStackItr : HighlightedTrayStack)
 			{
-				const FVector RelativeLoc = HighlightTrayStackItr->GetActorLocation() - RootLoc;
 				// Disable physics, collisions and attach item to the root actor
 				HighlightTrayStackItr->GetStaticMeshComponent()->SetSimulatePhysics(false);
 				HighlightTrayStackItr->GetStaticMeshComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 				HighlightTrayStackItr->AttachToActor(HighlightedRoot, FAttachmentTransformRules::KeepWorldTransform);
-				// Set relative location
-				HighlightTrayStackItr->SetActorRelativeLocation(RelativeLoc);
 			}
 			// Save stack, since the highlight will be removed
 			AttachedStack = HighlightedTrayStack;
 		}
-	}
 
+		// Create clones of the collected objects
+		ARWebCharacter::CreateClones(HighlightedRoot);
+		// Attach root to character after the objects have been attached to the root
+		HighlightedRoot->GetStaticMeshComponent()->SetSimulatePhysics(false);
+		HighlightedRoot->GetStaticMeshComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		HighlightedRoot->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
+		HighlightedRoot->SetActorRelativeLocation(BOTH_HANDS);
+	}
+	
 	// Add item to map (hand occupied)
 	HandToRootItem.Add(SelectedHand, HighlightedRoot);
-	// Create clones of the collected objects
-	ARWebCharacter::CreateClones(HighlightedRoot);
-	// Remove previous highlights
+	// Remove highlights
 	ARWebCharacter::RemoveHighlights();
 }
 
@@ -795,12 +800,12 @@ void ARWebCharacter::CreateClones(AStaticMeshActor* RootActorToClone)
 	SpawnParam.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
 	// Create the clone root from the actor
-	CloneRoot = GetWorld()->SpawnActorAbsolute<AStaticMeshActor>(
-		RootActorToClone->GetClass(), RootActorToClone->GetTransform(), SpawnParam);
+	CloneRoot = GetWorld()->SpawnActor<AStaticMeshActor>(
+		RootActorToClone->GetClass(), RootActorToClone->GetActorTransform(), SpawnParam);
 	// Set physics, collisions properties
 	CloneRoot->GetStaticMeshComponent()->SetSimulatePhysics(false);
 	CloneRoot->GetStaticMeshComponent()->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-
+	CloneRoot->SetActorTransform(RootActorToClone->GetActorTransform());
 
 	for (const auto AttachedStackItr : AttachedStack)
 	{
@@ -810,7 +815,7 @@ void ARWebCharacter::CreateClones(AStaticMeshActor* RootActorToClone)
 		SpawnParam.Instigator = AttachedStackItr->GetInstigator();
 		// Create the current stack clone from the actor
 		AStaticMeshActor* CurrStackClone = GetWorld()->SpawnActorAbsolute<AStaticMeshActor>(
-			AttachedStackItr->GetClass(), AttachedStackItr->GetTransform(), SpawnParam);
+			AttachedStackItr->GetClass(), AttachedStackItr->GetActorTransform(), SpawnParam);
 		// Set physics, collisions properties
 		CurrStackClone->GetStaticMeshComponent()->SetSimulatePhysics(false);
 		CurrStackClone->GetStaticMeshComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -820,57 +825,6 @@ void ARWebCharacter::CreateClones(AStaticMeshActor* RootActorToClone)
 		// Add clone to stack
 		CloneStack.Add(CurrStackClone);
 	}
-
-
-
-
-	//// Create the clone stack
-	//if (HighlightedStack.Num() > 0)
-	//{
-	//	float StackHeight = 0.0f;
-	//	for (const auto HighlightStackItr : HighlightedStack)
-	//	{
-	//		// Spawn parameters for the cloned stacked actor
-	//		SpawnParam.Template = HighlightStackItr;
-	//		SpawnParam.Owner = HighlightStackItr->GetOwner();
-	//		SpawnParam.Instigator = HighlightStackItr->GetInstigator();
-	//		// Create the current stack clone from the actor
-	//		AStaticMeshActor* CurrStackClone = GetWorld()->SpawnActorAbsolute<AStaticMeshActor>(
-	//			HighlightStackItr->GetClass(), HighlightStackItr->GetTransform(), SpawnParam);
-	//		// Set physics, collisions properties
-	//		CurrStackClone->GetStaticMeshComponent()->SetSimulatePhysics(false);
-	//		CurrStackClone->GetStaticMeshComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	//		// Attach clone to the root clone
-	//		CurrStackClone->AttachToActor(CloneRoot, FAttachmentTransformRules::KeepWorldTransform);
-	//		// Update current stack height
-	//		StackHeight += HighlightStackItr->GetComponentsBoundingBox(true).GetExtent().Z;
-	//		CurrStackClone->SetActorRelativeLocation(FVector(0.f, 0.f, StackHeight));
-	//		// Add clone to stack
-	//		CloneStack.Add(CurrStackClone);
-	//	}
-	//}
-	//else if (HighlightedTrayStack.Num() > 0)
-	//{
-	//	for (const auto HighlightTrayStackItr : HighlightedTrayStack)
-	//	{
-	//		// Spawn parameters for the cloned stacked actor
-	//		SpawnParam.Template = HighlightTrayStackItr;
-	//		SpawnParam.Owner = HighlightTrayStackItr->GetOwner();
-	//		SpawnParam.Instigator = HighlightTrayStackItr->GetInstigator();
-	//		// Create the current stack clone from the actor
-	//		AStaticMeshActor* CurrStackClone = GetWorld()->SpawnActorAbsolute<AStaticMeshActor>(
-	//			HighlightTrayStackItr->GetClass(), HighlightTrayStackItr->GetTransform(), SpawnParam);
-	//		// Set physics, collisions properties
-	//		CurrStackClone->GetStaticMeshComponent()->SetSimulatePhysics(false);
-	//		CurrStackClone->GetStaticMeshComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	//		// Attach clone to the root clone
-	//		CurrStackClone->AttachToActor(CloneRoot, FAttachmentTransformRules::KeepWorldTransform);
-	//		CurrStackClone->SetActorRelativeLocation(
-	//			HighlightTrayStackItr->GetActorLocation() - RootActorToClone->GetActorLocation());
-	//		// Add clone to stack
-	//		CloneStack.Add(CurrStackClone);
-	//	}
-	//}
 
 	// Set cloned actor to invisible
 	ShowClonedObjects(false);
