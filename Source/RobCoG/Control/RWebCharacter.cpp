@@ -71,6 +71,7 @@ void ARWebCharacter::BeginPlay()
 	// Init items that can interact with the character
 	ARWebCharacter::InitInteractiveItems();
 
+	// TODO add as UPROPERTY
 	GetWorld()->DebugDrawTraceTag = FName("UserTrace");
 }
 
@@ -618,7 +619,7 @@ FORCEINLINE void ARWebCharacter::CheckReleaseArea()
 {
 	// Set root clone location
 	CloneRoot->SetActorLocation(HitResult.ImpactPoint + 
-		(HitResult.Normal * CloneRoot->GetComponentsBoundingBox(true).GetExtent()));
+		(HitResult.Normal * CloneRoot->GetComponentsBoundingBox(true).GetExtent() + 1.1f));
 	
 	// Check if root clone is in collision
 	if (!ARWebCharacter::RootCloneIsColliding())
@@ -650,19 +651,35 @@ FORCEINLINE void ARWebCharacter::CheckReleaseArea()
 // Check if object is colliding at release
 FORCEINLINE bool ARWebCharacter::RootCloneIsColliding()
 {
-	//TODO  GetWorld()->ComponentOverlapMulti()
-	FHitResult OutHitRes;
-	CloneRoot->AddActorWorldOffset(FVector(0.f, 0.f, -1.f), true, &OutHitRes);
+	FComponentQueryParams CompCollParams(TEXT("CollOverl"), CloneRoot);
+	CompCollParams.TraceTag = FName("CollOverl");
+	FCollisionResponseParams ResponseParam; // It was in the example code, see why was it needed
+	UPrimitiveComponent* RootPrimitiveComp = Cast<class UPrimitiveComponent>(CloneRoot->GetRootComponent());
+	RootPrimitiveComp->InitSweepCollisionParams(CompCollParams, ResponseParam);
 
-	if (OutHitRes.IsValidBlockingHit())
+	if (!RootPrimitiveComp)
 	{
-		//UE_LOG(RobCoG, Warning, TEXT(" RootCollision with: %s"), *OutHitRes.GetActor()->GetName());
-		return true;
-	}
-	else
-	{
+		UE_LOG(RobCoG, Error,
+			TEXT(" !! ARWebCharacter::RootCloneIsColliding: Could not cast root component into UPrimitiveComponent!"));
 		return false;
 	}
+
+	TArray<FOverlapResult> Overlaps;
+	GetWorld()->ComponentOverlapMulti(
+		Overlaps, RootPrimitiveComp, CloneRoot->GetActorLocation(), CloneRoot->GetActorQuat(), CompCollParams);
+
+
+	UE_LOG(RobCoG, Warning, TEXT(" ** Coll overlaps: "));
+	for (const auto OverlapItr : Overlaps)
+	{
+		UE_LOG(RobCoG, Warning, TEXT(" \t %s "), *OverlapItr.GetActor()->GetName());
+	}
+
+	if (Overlaps.Num() > 0)
+	{
+		return true;
+	}
+	return false;
 }
 
 // Set highlighted selection
@@ -682,10 +699,9 @@ FORCEINLINE void ARWebCharacter::SetHighlights(AStaticMeshActor* RootActor)
 // Check for stacking higlight
 FORCEINLINE void ARWebCharacter::CreateHighlightStack(AStaticMeshActor* RootActor)
 {
+	// TODO cleanup extra code, eg debug draw trace..
 	// Get root actor location
-	const FVector ActorLoc = RootActor->GetActorLocation();
-
-	
+	const FVector ActorLoc = RootActor->GetActorLocation();	
 
 	// Check stackable type
 	if (StackableActors[RootActor] == EItemStackable::Tray)
@@ -694,15 +710,23 @@ FORCEINLINE void ARWebCharacter::CreateHighlightStack(AStaticMeshActor* RootActo
 		
 		FComponentQueryParams CompCollParams(TEXT("TrayTrace"), RootActor);
 		CompCollParams.TraceTag = FName("TrayTrace");
-		//FCollisionResponseParams ResponseParam;
+		//FCollisionResponseParams ResponseParam; // It was in the example code, see why was it needed
 		//RootActor->GetRootPrimitiveComponent()->InitSweepCollisionParams(CompCollParams, ResponseParam);
 		GetWorld()->DebugDrawTraceTag = FName("TrayTrace");
 		UE_LOG(RobCoG, Warning, TEXT(" ** Tray swipe:"));
+		UPrimitiveComponent* RootPrimitiveComp = Cast<UPrimitiveComponent>(RootActor->GetRootComponent());
+
+		if (!RootPrimitiveComp)
+		{
+			UE_LOG(RobCoG, Error, 
+				TEXT(" !! ARWebCharacter::CreateHighlightStack: Could not cast root component into UPrimitiveComponent!"));
+			return;
+		}
 
 		// Check object on tray
 		if (GetWorld()->ComponentSweepMulti(
 			TrayHitResults,
-			RootActor->GetRootPrimitiveComponent(),
+			RootPrimitiveComp,
 			ActorLoc + FVector(0.f, 0.f, 2.f),
 			ActorLoc + FVector(0.f, 0.f, MAX_STACK_HEIGHT),
 			RootActor->GetActorQuat(),
