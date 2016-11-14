@@ -6,7 +6,7 @@
 #include "PhysicsEngine/ConstraintInstance.h"
 #include "RPid3d.h"
 #include "RGrasp.h"
-#include "REnums.h"
+#include "RTypes.h"
 #include "RMCHand.generated.h"
 
 /**

@@ -1,7 +1,7 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #pragma once
-#include "REnums.h"
+#include "RTypes.h"
 
 /**
  * Base class for grasping, opens and closes the hand with a given step size

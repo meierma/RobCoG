@@ -6,10 +6,10 @@ using System.IO;
 public class RobCoG : ModuleRules
 {
     // PATH HELPERS
-    private string ThirdPartyPath
-    {
-        get { return Path.Combine(ModuleDirectory, "../../ThirdParty/"); }
-    }
+    //private string ThirdPartyPath
+    //{
+    //    get { return Path.Combine(ModuleDirectory, "../../ThirdParty/"); }
+    //}
 
     public RobCoG(TargetInfo Target)
     {
@@ -18,8 +18,9 @@ public class RobCoG : ModuleRules
             "CoreUObject",
             "Engine",
             "InputCore",
-            "Json",
-            "JsonUtilities",
+            //"Json",
+            //"JsonUtilities",
+            //"UMG",
 			//"XmlParser"
 			//"HydraPlugin",
 			//"HeadMountedDisplay",
@@ -30,11 +31,10 @@ public class RobCoG : ModuleRules
         PrivateDependencyModuleNames.AddRange(new string[] {
             "HeadMountedDisplay",
             "SteamVR",
+            "Slate",
+            "SlateCore",
             "USemLog"
          });
-
-        // Uncomment if you are using Slate UI
-        // PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore" });
 
         // Uncomment if you are using online features
         // PrivateDependencyModuleNames.Add("OnlineSubsystem");

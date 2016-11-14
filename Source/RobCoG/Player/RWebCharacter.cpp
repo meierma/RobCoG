@@ -39,7 +39,7 @@ ARWebCharacter::ARWebCharacter()
 	// Set capsule component as parent for the camera
 	CharacterCamera->SetupAttachment(GetRootComponent());
 	// Position the camera
-	CharacterCamera->RelativeLocation = FVector(10.0f, 0.0f, BaseEyeHeight);
+	CharacterCamera->RelativeLocation = FVector(0.0f, 0.0f, BaseEyeHeight);
 	// Allow the pawn to control the camera rotation
 	CharacterCamera->bUsePawnControlRotation = true;
 	
@@ -52,6 +52,8 @@ ARWebCharacter::ARWebCharacter()
 	// Initialize the trace parameters, used for ignoring the cloned objets
 	//TraceParams = FCollisionQueryParams();
 	TraceParams.TraceTag = FName("UserTrace");
+	// Self ignore
+	TraceParams.AddIgnoredActor(this);
 }
 
 // Called when the game starts or when spawned
@@ -72,7 +74,7 @@ void ARWebCharacter::BeginPlay()
 	ARWebCharacter::InitInteractiveItems();
 
 	// TODO add as UPROPERTY
-	GetWorld()->DebugDrawTraceTag = FName("UserTrace");
+	//GetWorld()->DebugDrawTraceTag = FName("UserTrace");
 }
 
 // Called every frame
@@ -653,7 +655,7 @@ FORCEINLINE bool ARWebCharacter::RootCloneIsColliding()
 {
 	FComponentQueryParams CompCollParams(TEXT("CollOverl"), CloneRoot);
 	CompCollParams.TraceTag = FName("CollOverl");
-	FCollisionResponseParams ResponseParam; // It was in the example code, see why was it needed
+	FCollisionResponseParams ResponseParam; // TODO It was in the example code, see why was it needed
 	UPrimitiveComponent* RootPrimitiveComp = Cast<class UPrimitiveComponent>(CloneRoot->GetRootComponent());
 	RootPrimitiveComp->InitSweepCollisionParams(CompCollParams, ResponseParam);
 
@@ -669,11 +671,11 @@ FORCEINLINE bool ARWebCharacter::RootCloneIsColliding()
 		Overlaps, RootPrimitiveComp, CloneRoot->GetActorLocation(), CloneRoot->GetActorQuat(), CompCollParams);
 
 
-	UE_LOG(RobCoG, Warning, TEXT(" ** Coll overlaps: "));
-	for (const auto OverlapItr : Overlaps)
-	{
-		UE_LOG(RobCoG, Warning, TEXT(" \t %s "), *OverlapItr.GetActor()->GetName());
-	}
+	//UE_LOG(RobCoG, Warning, TEXT(" ** Coll overlaps: "));
+	//for (const auto OverlapItr : Overlaps)
+	//{
+	//	UE_LOG(RobCoG, Warning, TEXT(" \t %s "), *OverlapItr.GetActor()->GetName());
+	//}
 
 	if (Overlaps.Num() > 0)
 	{
