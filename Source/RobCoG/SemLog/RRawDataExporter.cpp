@@ -34,7 +34,7 @@ FRRawDataExporter::~FRRawDataExporter()
 }
 
 // Update grasping
-void FRRawDataExporter::Update(const float Timestamp)
+void FRRawDataExporter::Update(const float Timestamp, const TArray<FString>& EEGLineData)
 {
 	// Json root object
 	TSharedPtr<FJsonObject> JsonRootObj = MakeShareable(new FJsonObject);
@@ -72,7 +72,7 @@ void FRRawDataExporter::Update(const float Timestamp)
 			CurrSkelMesh->GetBoneNames(BoneNames);
 
 			// Iterate through the bones of the skeletal mesh
-			for (const auto BoneName : BoneNames)
+			for (const auto& BoneName : BoneNames)
 			{
 				// TODO black voodo magic crashes, bug report, crashes if this is not called before
 				CurrSkelMesh->GetBoneQuaternion(BoneName);
@@ -163,6 +163,9 @@ void FRRawDataExporter::Update(const float Timestamp)
 	// Add actors to Json root
 	JsonRootObj->SetArrayField("actors", JsonActorArr);
 
+	/* EEG */
+	JsonRootObj->SetObjectField("eeg", FRRawDataExporter::CreateEEGChannelsJsonObject(EEGLineData));
+
 	// Transform to string
 	FString JsonOutputString;
 	TSharedRef< TJsonWriter<> > Writer = TJsonWriterFactory<>::Create(&JsonOutputString);
@@ -209,6 +212,29 @@ FORCEINLINE TSharedPtr<FJsonObject> FRRawDataExporter::CreateNameLocRotJsonObjec
 	JsonObj->SetObjectField("pos", FRRawDataExporter::CreateLocationJsonObject(Location));
 	JsonObj->SetObjectField("rot", FRRawDataExporter::CreateRotationJsonObject(Rotation));
 
+	return JsonObj;
+}
+
+// Create Json object with the EEG channels
+FORCEINLINE TSharedPtr<FJsonObject> FRRawDataExporter::CreateEEGChannelsJsonObject(const TArray<FString>& EEGLineData)
+{
+	// Json eeg object
+	TSharedPtr<FJsonObject> JsonObj = MakeShareable(new FJsonObject);
+	uint8 Index = 0;
+	for (const auto& EEGItr : EEGLineData)
+	{
+		// Skip first value (timestamp)
+		if(Index == 0)
+		{
+			++Index;
+			continue;
+		}
+		else
+		{
+			JsonObj->SetNumberField("c" + FString::FromInt(Index), FCString::Atof(*EEGItr));
+			++Index;
+		}
+	}
 	return JsonObj;
 }
 

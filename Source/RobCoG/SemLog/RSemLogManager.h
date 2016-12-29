@@ -61,6 +61,10 @@ private:
 	UPROPERTY(EditAnywhere, Category = "Semantic logger")
 	bool bLogSemanticEvents;
 
+	// Log EEG data
+	UPROPERTY(EditAnywhere, Category = "Semantic logger")
+	bool bLogEEGData;
+
 	// Map of skeletal component (to be logged) names to actor map 
 	TMap<FString, ASkeletalMeshActor*> SkelActNameToActPtrMap;
 
@@ -105,4 +109,17 @@ private:
 
 	// Episode unique tag
 	FString EpisodeUniqueTag;
+
+	/* EEG */
+	// Return an array of the EEG data from the file
+	void GetEEGData(TArray<FString>& FileEEGData);
+
+	// Return an array of the EEG data in the current line
+	TArray<FString> GetEEGLineData(uint8 LineNr);
+
+	// Array of the eeg data as lines
+	TArray<FString> EEGData;
+
+	// EEG file line nr
+	uint8 CurrEEGLineNr;
 };

@@ -24,9 +24,13 @@ ARSemLogManager::ARSemLogManager()
 	bLogRawData = true;
 	bLogSemanticMap = true;
 	bLogSemanticEvents = true;
+	bLogEEGData = true;
 
 	// Distance squared threshold for logging the raw data
 	DistanceThresholdSquared = 0.01;
+
+	// First line of the EEG data;
+	CurrEEGLineNr = 0;
 }
 
 // Called when the game starts or when spawned
@@ -35,7 +39,7 @@ void ARSemLogManager::BeginPlay()
 	Super::BeginPlay();
 
 	// Level directory path
-	LevelPath = LogRootDirectoryName + "/" +	GetWorld()->GetName();
+	LevelPath = LogRootDirectoryName + "/" + GetWorld()->GetName();
 	// Episode directory path
 	EpisodePath = LevelPath + "/Episodes/" + "rcg_" + FDateTime::Now().ToString();
 	// Raw data directory path
@@ -97,9 +101,15 @@ void ARSemLogManager::BeginPlay()
 	{
 		FRSemEventsExporterSingl::Get().Init(
 			EpisodeUniqueTag,
-			ActorToUniqueNameMap, 
-			ActorToClassTypeMap, 
+			ActorToUniqueNameMap,
+			ActorToClassTypeMap,
 			GetWorld()->GetTimeSeconds());
+	}
+
+	// Read the EEG data
+	if (bLogEEGData)
+	{
+		GetEEGData(EEGData);
 	}
 }
 
@@ -126,8 +136,9 @@ void ARSemLogManager::Tick( float DeltaTime )
 	
 	// Log raw data
 	if (RawDataExporter)
-	{
-		RawDataExporter->Update(GetWorld()->GetTimeSeconds());
+	{			
+		RawDataExporter->Update(GetWorld()->GetTimeSeconds(), GetEEGLineData(CurrEEGLineNr));
+		++CurrEEGLineNr;
 	}
 }
 
@@ -478,4 +489,30 @@ void ARSemLogManager::WriteUniqueNames(const FString Path)
 
 	// Write string to file
 	FFileHelper::SaveStringToFile(JsonOutputString, *Path);
+}
+
+// Get the EEG data from file
+ void ARSemLogManager::GetEEGData(TArray<FString>& FileEEGData)
+{
+	const FString Path = LogRootDirectoryName + "/EEGData.csv";
+
+	// Check if file exists, and see if it is in sync with the level
+	if (IFileManager::Get().FileExists(*Path))
+	{
+		FString WholeFile;
+		FFileHelper::LoadFileToString(WholeFile, *Path);
+		WholeFile.ParseIntoArrayLines(FileEEGData);
+	}
+}
+
+// Get the EEG data of the given line
+TArray<FString> ARSemLogManager::GetEEGLineData(uint8 LineNr)
+{
+	TArray<FString> LineEEGData;
+	if (EEGData.IsValidIndex(LineNr))
+	{
+		EEGData[LineNr].ParseIntoArray(LineEEGData, TEXT(";"));
+		UE_LOG(LogTemp, Log, TEXT(" ** EEG line nr: %u"), CurrEEGLineNr);
+	}
+	return LineEEGData;
 }

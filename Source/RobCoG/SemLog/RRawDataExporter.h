@@ -22,7 +22,7 @@ public:
 	~FRRawDataExporter();
 
 	// Log step
-	void Update(const float Timestamp);
+	void Update(const float Timestamp, const TArray<FString>& EEGLineData);
 
 	// Structure of skeletal mesh comp with its previous pose
 	struct FRSkelLogRawStruct
@@ -62,6 +62,9 @@ private:
 	// Create Json object with name location and rotation
 	TSharedPtr<FJsonObject> CreateNameLocRotJsonObject(
 		const FString Name, const FVector Location, const FQuat Rotation);
+
+	// Create Json object with the EEG channels
+	TSharedPtr<FJsonObject> CreateEEGChannelsJsonObject(const TArray<FString>& EEGLineData);
 
 	// Init items to log from the level
 	void InitItemsToLog(
