@@ -506,13 +506,13 @@ void ARSemLogManager::WriteUniqueNames(const FString Path)
 }
 
 // Get the EEG data of the given line
-TArray<FString> ARSemLogManager::GetEEGLineData(uint8 LineNr)
+TArray<FString> ARSemLogManager::GetEEGLineData(uint32 LineNr)
 {
 	TArray<FString> LineEEGData;
 	if (EEGData.IsValidIndex(LineNr))
 	{
 		EEGData[LineNr].ParseIntoArray(LineEEGData, TEXT(";"));
-		UE_LOG(LogTemp, Log, TEXT(" ** EEG line nr: %u"), CurrEEGLineNr);
+		UE_LOG(LogTemp, Error, TEXT(" EEG Line: %u [%f]"), CurrEEGLineNr, GetWorld()->GetTimeSeconds());
 	}
 	return LineEEGData;
 }

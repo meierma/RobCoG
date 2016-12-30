@@ -115,11 +115,11 @@ private:
 	void GetEEGData(TArray<FString>& FileEEGData);
 
 	// Return an array of the EEG data in the current line
-	TArray<FString> GetEEGLineData(uint8 LineNr);
+	TArray<FString> GetEEGLineData(uint32 LineNr);
 
 	// Array of the eeg data as lines
 	TArray<FString> EEGData;
 
 	// EEG file line nr
-	uint8 CurrEEGLineNr;
+	uint32 CurrEEGLineNr;
 };
